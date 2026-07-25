@@ -8,3 +8,4 @@ compose.yml
 *.mcaddon
 node_modules/
 npm-debug.log*
+.env

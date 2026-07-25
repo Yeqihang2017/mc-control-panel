@@ -53,16 +53,22 @@ mc-control-panel/.panel-tmp/
 
 ## Docker 部署面板
 
-在项目目录运行：
+在项目目录运行一条命令即可自动生成 Docker 配置并启动面板：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start-panel-docker.ps1
 ```
 
-或直接使用 Docker Compose：
+脚本会自动生成本机 `.env`，里面包含 Docker Desktop 能识别的项目目录路径。`.env` 是本机配置文件，已经被 `.gitignore` 排除。
+
+或手动创建 `.env` 后使用 Docker Compose：
+
+```env
+PANEL_HOST_DATA_DIR=/run/desktop/mnt/host/e/Games/Server/mc-control-panel
+```
 
 ```powershell
-docker compose -f panel.compose.yml up -d --build
+docker compose --env-file .env -f panel.compose.yml up -d --build
 ```
 
 查看面板容器日志：
@@ -74,7 +80,7 @@ docker logs -f mc-control-panel
 停止面板：
 
 ```powershell
-docker compose -f panel.compose.yml down
+docker compose --env-file .env -f panel.compose.yml down
 ```
 
 ## 本机 Node 启动
@@ -94,9 +100,9 @@ powershell -ExecutionPolicy Bypass -File .\start-panel.ps1
 | `PANEL_HOST` | `0.0.0.0` | 面板监听地址 |
 | `PANEL_PORT` | `8787` | 面板监听端口 |
 | `PANEL_DATA_DIR` | `/data` | 容器内数据目录 |
-| `PANEL_HOST_DATA_DIR` | `/run/desktop/mnt/host/e/Games/Server/mc-control-panel` | Docker Desktop 中映射到宿主机项目目录的路径 |
+| `PANEL_HOST_DATA_DIR` | 由 `.env` 提供 | Docker Desktop 中映射到宿主机项目目录的路径 |
 
-如果你把项目移动到其他磁盘或目录，需要同步修改 `panel.compose.yml` 中的 `PANEL_HOST_DATA_DIR`。
+如果你把项目移动到其他磁盘或目录，重新运行 `start-panel-docker.ps1` 即可刷新 `.env`。
 
 ## 安全提示
 
