@@ -1,0 +1,7 @@
+servers
+.panel-tmp
+panel.log
+*.zip
+*.mcworld
+*.mcpack
+*.mcaddon

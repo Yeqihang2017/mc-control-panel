@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Minecraft 控制面板</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">MC</div>
+        <div>
+          <h1>服务器面板</h1>
+          <p>Docker Bedrock</p>
+        </div>
+      </div>
+      <button class="primary wide" id="refreshBtn">刷新状态</button>
+      <div id="serverList" class="server-list"></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2 id="activeTitle">正在读取服务器</h2>
+          <p id="activeSub">连接 Docker compose...</p>
+        </div>
+        <div class="top-actions">
+          <button id="showDeployBtn">新建部署</button>
+          <button id="openDetailsBtn">服务器详情</button>
+          <button id="openConsoleBtn">控制台</button>
+          <button id="logsBtn">面板日志</button>
+        </div>
+      </header>
+
+      <section class="status-row dashboard-only" id="statusRow"></section>
+
+      <section class="layout">
+        <div class="panel deploy-panel dashboard-only" id="deployPanel">
+          <div class="panel-head">
+            <h3>一键部署</h3>
+            <button class="ghost" id="hideDeployBtn">收起</button>
+          </div>
+          <form id="deployForm" class="form-grid">
+            <label>服务名<input name="serviceName" placeholder="bedrock-new-19138"></label>
+            <label>显示名<input name="displayName" value="My Bedrock Server"></label>
+            <label>IPv4 端口<input name="port" type="number" value="19138" min="1" max="65535" required></label>
+            <label>IPv6 端口<input name="portV6" type="number" value="19139" min="1" max="65535"></label>
+            <label>版本
+              <select name="version" id="versionSelect">
+                <option value="LATEST">最新版</option>
+                <option value="1.26.33.2">1.26.33.2</option>
+                <option value="1.26.33.1">1.26.33.1</option>
+                <option value="1.26.31.1">1.26.31.1</option>
+                <option value="1.21.130">1.21.130</option>
+                <option value="1.21.120">1.21.120</option>
+                <option value="1.21.110">1.21.110</option>
+                <option value="1.21.100">1.21.100</option>
+              </select>
+            </label>
+            <label>世界名<input name="levelName" value="Bedrock level"></label>
+            <label>种子<input name="levelSeed"></label>
+            <label>最大玩家<input name="maxPlayers" type="number" value="10" min="1"></label>
+            <label>游戏模式<select name="gamemode"><option>survival</option><option>creative</option><option>adventure</option></select></label>
+            <label>难度<select name="difficulty"><option>normal</option><option>peaceful</option><option>easy</option><option>hard</option></select></label>
+            <label>视距<input name="viewDistance" type="number" value="32" min="5"></label>
+            <label>Tick 距离<input name="tickDistance" type="number" value="4" min="4" max="12"></label>
+            <label class="check"><input name="onlineMode" type="checkbox" checked> 在线验证</label>
+            <label class="check"><input name="allowCheats" type="checkbox"> 允许作弊</label>
+            <label class="check"><input name="allowList" type="checkbox"> 白名单</label>
+            <label class="check"><input name="forceGamemode" type="checkbox"> 强制模式</label>
+            <label class="check"><input name="texturepackRequired" type="checkbox"> 强制材质包</label>
+            <label class="check"><input name="enableLanVisibility" type="checkbox" checked> LAN 可见</label>
+            <label class="check danger-check"><input name="forceOverwriteDataDir" type="checkbox"> 强制覆盖数据目录</label>
+            <button class="primary submit" type="submit">部署并启动</button>
+          </form>
+        </div>
+
+        <div class="panel dashboard-only">
+          <div class="panel-head">
+            <h3>运行控制</h3>
+            <span id="serverPath"></span>
+          </div>
+          <div class="action-grid">
+            <button data-action="up">创建/启动</button>
+            <button data-action="start">启动</button>
+            <button data-action="stop">停止</button>
+            <button data-action="restart">重启</button>
+            <button data-action="pause">暂停</button>
+            <button data-action="unpause">恢复</button>
+          </div>
+        </div>
+
+        <div class="panel dashboard-only resource-panel">
+          <div class="panel-head">
+            <h3>资源占用</h3>
+            <div class="log-actions">
+              <span id="resourceStatus">等待刷新</span>
+              <button id="refreshResourcesBtn">刷新</button>
+            </div>
+          </div>
+          <div class="resource-grid">
+            <div class="resource-item"><span>CPU</span><strong id="resourceCpu">-</strong></div>
+            <div class="resource-item"><span>内存</span><strong id="resourceMemory">-</strong></div>
+            <div class="resource-item"><span>内存占比</span><strong id="resourceMemoryPercent">-</strong></div>
+            <div class="resource-item"><span>进程数</span><strong id="resourcePids">-</strong></div>
+            <div class="resource-item wide-resource"><span>网络 IO</span><strong id="resourceNetwork">-</strong></div>
+            <div class="resource-item wide-resource"><span>磁盘 IO</span><strong id="resourceBlock">-</strong></div>
+          </div>
+        </div>
+
+        <div class="panel config-panel dashboard-only">
+          <div class="panel-head">
+            <h3>关键配置</h3>
+            <button class="primary" id="savePropsBtn">保存配置</button>
+          </div>
+          <form id="propsForm" class="form-grid compact"></form>
+        </div>
+
+        <div class="panel details-panel" id="detailsPanel">
+          <div class="panel-head">
+            <h3>服务器详情</h3>
+            <button id="closeDetailsBtn">返回一级面板</button>
+          </div>
+          <div class="tabs">
+            <button class="selected" data-tab="worlds">世界</button>
+            <button data-tab="allowlist">白名单</button>
+            <button data-tab="packs">模组/资源包</button>
+            <button data-tab="files">文件</button>
+            <button data-tab="danger">删除</button>
+          </div>
+
+          <div class="tab-page active" id="tab-worlds">
+            <div class="world-tools">
+              <label>当前世界<select id="worldSelect"></select></label>
+              <button id="refreshWorldsBtn">刷新</button>
+              <button class="danger" id="deleteWorldBtn">备份并删除</button>
+            </div>
+            <div class="form-grid compact">
+              <label>新世界名<input id="newWorldName" placeholder="new-world"></label>
+              <label>新世界种子<input id="newWorldSeed"></label>
+              <button id="newWorldBtn">设为新世界</button>
+            </div>
+
+            <div class="backup-grid">
+              <section class="subpanel">
+                <h4>手动备份</h4>
+                <div class="upload-line">
+                  <button id="backupWorldBtn">立即备份当前世界</button>
+                </div>
+              </section>
+
+              <section class="subpanel">
+                <h4>自动备份</h4>
+                <div class="form-grid compact">
+                  <label>备份目录<input id="backupDirInput" placeholder="backups"></label>
+                  <label>间隔分钟<input id="backupIntervalInput" type="number" min="1" max="1440"></label>
+                  <label>最大文件数<input id="backupMaxFilesInput" type="number" min="1" max="500"></label>
+                  <label class="check"><input id="autoBackupEnabledInput" type="checkbox"> 启用自动备份</label>
+                  <button id="saveBackupSettingsBtn">保存自动备份</button>
+                </div>
+              </section>
+            </div>
+
+            <section class="subpanel">
+              <div class="panel-head flat">
+                <h4>最近备份</h4>
+                <button id="refreshBackupsBtn">刷新备份</button>
+              </div>
+              <div id="backupList" class="backup-list"></div>
+            </section>
+
+            <section class="subpanel">
+              <h4>手动选择还原</h4>
+              <div class="upload-line">
+                <input id="worldFile" type="file" accept=".zip,.mcworld">
+                <input id="replaceWorldName" placeholder="还原为世界名">
+                <button id="replaceWorldBtn">上传并还原</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="tab-page" id="tab-allowlist">
+            <div class="form-grid compact">
+              <label>玩家名<input id="allowlistNameInput" placeholder="Steve"></label>
+              <label>XUID 可选<input id="allowlistXuidInput" placeholder="可留空"></label>
+              <label class="check"><input id="allowlistIgnoreLimitInput" type="checkbox"> 忽略人数上限</label>
+              <button id="addAllowlistBtn">添加/更新</button>
+            </div>
+            <div id="allowlistBox" class="backup-list"></div>
+          </div>
+
+          <div class="tab-page" id="tab-packs">
+            <div class="upload-line">
+              <input id="modFile" type="file" accept=".zip,.mcpack,.mcaddon">
+              <button id="installModBtn">安装包</button>
+            </div>
+            <div class="pack-columns">
+              <div><h4>Behavior Packs</h4><div id="behaviorPacks" class="chips"></div></div>
+              <div><h4>Resource Packs</h4><div id="resourcePacks" class="chips"></div></div>
+            </div>
+          </div>
+
+          <div class="tab-page" id="tab-files">
+            <div class="panel-head flat">
+              <div class="filebar">
+                <button id="fileUpBtn">上级</button>
+                <span id="filePath">/</span>
+              </div>
+              <button class="primary" id="saveFileBtn">保存文件</button>
+            </div>
+            <div class="file-editor">
+              <div id="fileList" class="file-list"></div>
+              <textarea id="fileText" spellcheck="false" placeholder="选择左侧文件"></textarea>
+            </div>
+          </div>
+
+          <div class="tab-page" id="tab-danger">
+            <div class="danger-zone">
+              <h4>删除服务器</h4>
+              <p>会停止并移除容器，然后从面板 compose 中删除该服务。默认保留数据目录。</p>
+              <label>输入服务器名确认<input id="deleteServerName" placeholder="完整服务器名"></label>
+              <label class="check danger-check"><input id="deleteServerData" type="checkbox"> 同时删除数据目录</label>
+              <button class="danger" id="deleteServerBtn">删除服务器</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel console-panel" id="consolePanel">
+          <div class="panel-head">
+            <h3>控制台</h3>
+            <button id="closeConsoleBtn">返回一级面板</button>
+          </div>
+          <section class="console-log">
+            <div class="panel-head flat">
+              <h3>实时服务器日志</h3>
+              <div class="log-actions">
+                <span id="liveLogStatus">自动刷新</span>
+                <button id="refreshLiveLogsBtn">刷新</button>
+              </div>
+            </div>
+            <pre id="liveLogsBox"></pre>
+          </section>
+          <section class="command-section">
+            <div class="panel-head flat">
+              <h3>游戏指令</h3>
+            </div>
+            <div class="command-hints">
+              <button data-command-template="list">在线玩家</button>
+              <button data-command-template="say 服务器公告">公告</button>
+              <button data-command-template="time set day">白天</button>
+              <button data-command-template="weather clear">晴天</button>
+              <button data-command-template="difficulty normal">普通难度</button>
+              <button data-command-template="gamemode creative 玩家名">创造模式</button>
+              <button data-command-template="tp 玩家名 0 80 0">传送</button>
+              <button data-command-template="give 玩家名 diamond 1">给予物品</button>
+            </div>
+            <form id="commandForm" class="command-line">
+              <input id="commandInput" placeholder="输入指令，不需要前面的 /">
+              <button class="primary" type="submit">发送指令</button>
+            </form>
+            <pre id="commandOutput" class="mini-output"></pre>
+          </section>
+        </div>
+
+        <div class="panel logs-panel dashboard-only" id="logsPanel">
+          <div class="panel-head">
+            <h3>日志</h3>
+            <div class="log-actions">
+              <button data-log-mode="server" class="selected">服务器日志</button>
+              <button data-log-mode="panel">面板日志</button>
+              <button id="refreshLogsBtn">刷新日志</button>
+              <button id="closeLogsBtn">关闭</button>
+            </div>
+          </div>
+          <pre id="logsBox"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

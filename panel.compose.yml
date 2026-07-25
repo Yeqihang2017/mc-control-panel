@@ -1,0 +1,19 @@
+name: mc-control-panel-app
+
+services:
+  panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mc-control-panel
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PANEL_HOST: "0.0.0.0"
+      PANEL_PORT: "8787"
+      PANEL_DATA_DIR: "/data"
+      PANEL_HOST_DATA_DIR: "/run/desktop/mnt/host/e/Games/Server/mc-control-panel"
+    volumes:
+      - ./:/data
+      - /var/run/docker.sock:/var/run/docker.sock

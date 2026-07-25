@@ -1,0 +1,10 @@
+servers/
+.panel-tmp/
+panel.log
+compose.yml
+*.zip
+*.mcworld
+*.mcpack
+*.mcaddon
+node_modules/
+npm-debug.log*
