@@ -6,3 +6,4 @@ panel.log
 *.mcpack
 *.mcaddon
 .env
+.panel-auth.json*

@@ -20,6 +20,64 @@ body {
   color: var(--ink);
   background: linear-gradient(135deg, #f6f7ef 0%, #edf5f4 48%, #f8f4ea 100%);
 }
+body.auth-locked { overflow: hidden; }
+
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #edf1eb;
+}
+.auth-gate[hidden] { display: none; }
+.auth-box {
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.auth-brand {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.auth-brand h1, .auth-brand p, .auth-form h2, .auth-form p { margin: 0; }
+.auth-brand h1 { font-size: 20px; }
+.auth-brand p, .auth-form p { color: var(--muted); margin-top: 5px; line-height: 1.5; }
+.auth-form { display: grid; gap: 14px; }
+.auth-form h2 { font-size: 22px; }
+.auth-form[hidden] { display: none; }
+.auth-error {
+  min-height: 20px;
+  margin: 14px 0 0;
+  color: #9c321f;
+  font-size: 13px;
+}
+.account-dialog {
+  width: min(500px, calc(100% - 32px));
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+.account-dialog::backdrop { background: rgba(21, 29, 21, .56); }
+.account-dialog .panel-head { align-items: flex-start; }
+.account-dialog h2 { font-size: 21px; }
+.account-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
 
 button, input, select, textarea {
   font: inherit;
@@ -47,6 +105,7 @@ button:hover { border-color: #95b391; background: #f7fbf6; }
   grid-template-columns: 300px minmax(0, 1fr);
   min-height: 100vh;
 }
+.shell[hidden] { display: none; }
 
 .sidebar {
   border-right: 1px solid var(--line);
@@ -198,6 +257,7 @@ label {
   color: var(--muted);
   font-size: 12px;
 }
+.restart-settings [hidden] { display: none !important; }
 input, select, textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -318,6 +378,36 @@ textarea { padding: 12px; resize: vertical; }
   margin: 12px 0;
 }
 .subpanel h4 { margin-bottom: 10px; }
+.muted-copy {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.schedule-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.schedule-status > div {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+}
+.schedule-status span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.schedule-status strong {
+  display: block;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
 .backup-list {
   display: grid;
   gap: 8px;
@@ -423,6 +513,19 @@ textarea { padding: 12px; resize: vertical; }
   border-radius: 8px;
   white-space: pre-wrap;
 }
+.service-log {
+  min-height: 220px;
+  max-height: 420px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: #151a16;
+  color: #dfeee0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.frp-settings #frpTokenInput { font-family: Consolas, "Courier New", monospace; }
 .danger-zone {
   border: 1px solid #e2b3a9;
   background: #fff8f6;
@@ -462,8 +565,10 @@ textarea { padding: 12px; resize: vertical; }
   .status-row, .form-grid, .form-grid.compact, .file-editor, .pack-columns { grid-template-columns: 1fr; }
   .backup-grid, .backup-row { grid-template-columns: 1fr; }
   .resource-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .schedule-status { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wide-resource { grid-column: span 2; }
   .command-line { grid-template-columns: 1fr; }
   .action-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .submit { grid-column: auto; }
+  .auth-box { padding: 22px; }
 }

@@ -4,10 +4,40 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Minecraft 控制面板</title>
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=4">
 </head>
 <body>
-  <div class="shell">
+  <div class="auth-gate" id="authGate">
+    <main class="auth-box" aria-live="polite">
+      <div class="auth-brand">
+        <div class="mark">MC</div>
+        <div>
+          <h1>Minecraft 控制面板</h1>
+          <p id="authSubtitle">正在检查管理员账户...</p>
+        </div>
+      </div>
+
+      <form id="setupForm" class="auth-form" hidden>
+        <h2>创建管理员</h2>
+        <p>首次使用需要创建管理员账户。密码只会以加密哈希保存。</p>
+        <label>管理员名称<input name="username" autocomplete="username" minlength="3" maxlength="32" required></label>
+        <label>密码<input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>
+        <label>确认密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>
+        <button class="primary" type="submit">创建并进入面板</button>
+      </form>
+
+      <form id="loginForm" class="auth-form" hidden>
+        <h2>管理员登录</h2>
+        <p>登录后才能查看和管理 Minecraft 服务器。</p>
+        <label>管理员名称<input name="username" autocomplete="username" required></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password" required></label>
+        <button class="primary" type="submit">登录</button>
+      </form>
+      <p class="auth-error" id="authError" role="alert"></p>
+    </main>
+  </div>
+
+  <div class="shell" id="appShell" hidden>
     <aside class="sidebar">
       <div class="brand">
         <div class="mark">MC</div>
@@ -31,6 +61,7 @@
           <button id="openDetailsBtn">服务器详情</button>
           <button id="openConsoleBtn">控制台</button>
           <button id="logsBtn">面板日志</button>
+          <button id="accountBtn">管理员账户</button>
         </div>
       </header>
 
@@ -61,11 +92,11 @@
             </label>
             <label>世界名<input name="levelName" value="Bedrock level"></label>
             <label>种子<input name="levelSeed"></label>
-            <label>最大玩家<input name="maxPlayers" type="number" value="10" min="1"></label>
+            <label>最大玩家<input name="maxPlayers" type="number" value="10" min="1" step="1"></label>
             <label>游戏模式<select name="gamemode"><option>survival</option><option>creative</option><option>adventure</option></select></label>
             <label>难度<select name="difficulty"><option>normal</option><option>peaceful</option><option>easy</option><option>hard</option></select></label>
-            <label>视距<input name="viewDistance" type="number" value="32" min="5"></label>
-            <label>Tick 距离<input name="tickDistance" type="number" value="4" min="4" max="12"></label>
+            <label>视距<input name="viewDistance" type="number" value="32" min="5" max="96" step="1"></label>
+            <label>Tick 距离<input name="tickDistance" type="number" value="4" min="4" max="12" step="1"></label>
             <label class="check"><input name="onlineMode" type="checkbox" checked> 在线验证</label>
             <label class="check"><input name="allowCheats" type="checkbox"> 允许作弊</label>
             <label class="check"><input name="allowList" type="checkbox"> 白名单</label>
@@ -127,6 +158,8 @@
             <button class="selected" data-tab="worlds">世界</button>
             <button data-tab="allowlist">白名单</button>
             <button data-tab="packs">模组/资源包</button>
+            <button data-tab="restart">定时重启</button>
+            <button data-tab="frp">内网穿透</button>
             <button data-tab="files">文件</button>
             <button data-tab="danger">删除</button>
           </div>
@@ -200,6 +233,75 @@
               <div><h4>Behavior Packs</h4><div id="behaviorPacks" class="chips"></div></div>
               <div><h4>Resource Packs</h4><div id="resourcePacks" class="chips"></div></div>
             </div>
+          </div>
+
+          <div class="tab-page" id="tab-restart">
+            <section class="subpanel restart-settings">
+              <div class="panel-head flat">
+                <div>
+                  <h4>定时重启服务器</h4>
+                  <p class="muted-copy">只重启计划执行时正在运行的服务器，停机或暂停状态会自动跳过。</p>
+                </div>
+                <span id="restartTimezone">当前时区</span>
+              </div>
+              <div class="form-grid compact">
+                <label class="check"><input id="restartEnabledInput" type="checkbox"> 启用定时重启</label>
+                <label>执行方式
+                  <select id="restartModeInput">
+                    <option value="interval">按间隔循环</option>
+                    <option value="daily">每天固定时间</option>
+                  </select>
+                </label>
+                <label id="restartIntervalField">间隔小时<input id="restartIntervalInput" type="number" min="1" max="168" step="1" value="12"></label>
+                <label id="restartDailyField" hidden>每天时间<input id="restartDailyInput" type="time" value="04:00"></label>
+                <button class="primary" id="saveRestartSettingsBtn">保存重启计划</button>
+              </div>
+            </section>
+            <section class="schedule-status">
+              <div><span>当前计划</span><strong id="restartPlanStatus">未启用</strong></div>
+              <div><span>下次执行</span><strong id="restartNextRun">-</strong></div>
+              <div><span>上次执行</span><strong id="restartLastRun">尚未执行</strong></div>
+              <div><span>执行结果</span><strong id="restartLastResult">-</strong></div>
+            </section>
+          </div>
+
+          <div class="tab-page" id="tab-frp">
+            <section class="subpanel frp-settings">
+              <div class="panel-head flat">
+                <div>
+                  <h4>FRP 内网穿透</h4>
+                  <p class="muted-copy">将这台 Bedrock 服务器的 UDP 端口转发到你的公网 frps。VPS 防火墙需放行公网 UDP 端口。</p>
+                </div>
+                <span id="frpImageLabel">frpc</span>
+              </div>
+              <form id="frpForm" class="form-grid compact">
+                <label class="check"><input id="frpEnabledInput" type="checkbox"> 启用 FRP 穿透</label>
+                <label>frps 地址<input id="frpServerAddrInput" placeholder="frp.example.com" autocomplete="off"></label>
+                <label>控制端口<input id="frpServerPortInput" type="number" min="1" max="65535" step="1" value="7000"></label>
+                <label>公网 UDP 端口<input id="frpRemotePortInput" type="number" min="1" max="65535" step="1"></label>
+                <label>认证令牌<input id="frpTokenInput" type="password" maxlength="512" autocomplete="new-password" placeholder="已配置时留空表示不修改"></label>
+                <label class="check"><input id="frpTlsInput" type="checkbox" checked> 启用 TLS</label>
+                <button class="primary" type="submit">保存并应用</button>
+              </form>
+            </section>
+            <section class="schedule-status frp-status-grid">
+              <div><span>代理状态</span><strong id="frpStatus">未配置</strong></div>
+              <div><span>公网入口</span><strong id="frpEndpoint">-</strong></div>
+              <div><span>令牌</span><strong id="frpTokenStatus">未配置</strong></div>
+              <div><span>更新时间</span><strong id="frpUpdatedAt">-</strong></div>
+            </section>
+            <section class="subpanel">
+              <div class="panel-head flat">
+                <h4>frpc 控制与日志</h4>
+                <div class="log-actions">
+                  <button data-frp-action="start">启动</button>
+                  <button data-frp-action="stop">停止</button>
+                  <button data-frp-action="restart">重启</button>
+                  <button id="refreshFrpBtn">刷新</button>
+                </div>
+              </div>
+              <pre id="frpLogsBox" class="service-log">尚未启用 FRP。</pre>
+            </section>
           </div>
 
           <div class="tab-page" id="tab-files">
@@ -279,7 +381,26 @@
       </section>
     </main>
   </div>
+  <dialog id="accountDialog" class="account-dialog">
+    <form id="accountForm" class="auth-form">
+      <div class="panel-head flat">
+        <div>
+          <h2>管理员账户</h2>
+          <p id="accountSignedIn"></p>
+        </div>
+        <button id="closeAccountBtn" type="button" aria-label="关闭">关闭</button>
+      </div>
+      <label>管理员名称<input name="username" autocomplete="username" minlength="3" maxlength="32" required></label>
+      <label>当前密码<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+      <label>新密码（不修改请留空）<input name="newPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128"></label>
+      <label>确认新密码<input name="confirmPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128"></label>
+      <div class="account-actions">
+        <button class="danger" id="logoutBtn" type="button">退出登录</button>
+        <button class="primary" type="submit">保存账户</button>
+      </div>
+    </form>
+  </dialog>
   <div id="toast"></div>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=4"></script>
 </body>
 </html>

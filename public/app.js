@@ -1,14 +1,14 @@
 const KEY_FIELDS = [
   ["server-name", "服务器名", "text"],
-  ["server-port", "IPv4 端口", "number"],
-  ["server-portv6", "IPv6 端口", "number"],
+  ["server-port", "IPv4 端口", "number", { min: 1, max: 65535 }],
+  ["server-portv6", "IPv6 端口", "number", { min: 1, max: 65535 }],
   ["level-name", "世界名", "text"],
   ["level-seed", "种子", "text"],
   ["gamemode", "游戏模式", "select", ["survival", "creative", "adventure"]],
   ["difficulty", "难度", "select", ["peaceful", "easy", "normal", "hard"]],
-  ["max-players", "最大玩家", "number"],
-  ["view-distance", "视距", "number"],
-  ["tick-distance", "Tick 距离", "number"],
+  ["max-players", "最大玩家", "number", { min: 1 }],
+  ["view-distance", "视距", "number", { min: 5, max: 96 }],
+  ["tick-distance", "Tick 距离", "number", { min: 4, max: 12 }],
   ["allow-cheats", "允许作弊", "bool"],
   ["online-mode", "在线验证", "bool"],
   ["allow-list", "白名单", "bool"],
@@ -28,7 +28,9 @@ const state = {
   liveLogLoading: false,
   resourceTimer: null,
   resourceLoading: false,
-  view: "dashboard"
+  view: "dashboard",
+  username: "",
+  csrfToken: ""
 };
 
 const $ = (id) => document.getElementById(id);
@@ -42,13 +44,110 @@ function toast(message) {
 }
 
 async function api(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (!["GET", "HEAD", "OPTIONS"].includes(method) && state.csrfToken && !path.startsWith("/api/auth/login") && !path.startsWith("/api/auth/setup")) {
+    headers["X-CSRF-Token"] = state.csrfToken;
+  }
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-    ...options
+    credentials: "same-origin",
+    ...options,
+    headers
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || response.statusText);
+  if (!response.ok) {
+    if (response.status === 401 && !path.startsWith("/api/auth/")) showAuthGate(false);
+    throw new Error(data.error || response.statusText);
+  }
   return data;
+}
+
+function showAuthGate(needsSetup) {
+  state.username = "";
+  state.csrfToken = "";
+  clearInterval(state.liveLogTimer);
+  clearInterval(state.resourceTimer);
+  state.liveLogTimer = null;
+  state.resourceTimer = null;
+  $("authGate").hidden = false;
+  $("appShell").hidden = true;
+  $("setupForm").hidden = !needsSetup;
+  $("loginForm").hidden = needsSetup;
+  $("authSubtitle").textContent = needsSetup ? "首次使用，请先建立安全账户" : "使用管理员账户继续";
+  $("authError").textContent = "";
+  document.body.classList.add("auth-locked");
+  const input = (needsSetup ? $("setupForm") : $("loginForm")).querySelector("input");
+  window.setTimeout(() => input.focus(), 0);
+}
+
+function acceptAuth(data) {
+  state.username = data.username;
+  state.csrfToken = data.csrfToken;
+  $("authGate").hidden = true;
+  $("appShell").hidden = false;
+  $("authError").textContent = "";
+  document.body.classList.remove("auth-locked");
+  $("accountSignedIn").textContent = `当前登录：${data.username}`;
+  $("accountForm").elements.username.value = data.username;
+}
+
+async function submitAuthForm(event, setup) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const body = Object.fromEntries(new FormData(form).entries());
+  $("authError").textContent = "";
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    const data = await api(setup ? "/api/auth/setup" : "/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    form.reset();
+    acceptAuth(data);
+    await startPanel();
+  } catch (error) {
+    $("authError").textContent = error.message || "认证失败";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function updateAccount(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const body = Object.fromEntries(new FormData(form).entries());
+  const data = await api("/api/auth/account", { method: "PUT", body: JSON.stringify(body) });
+  acceptAuth(data);
+  form.elements.currentPassword.value = "";
+  form.elements.newPassword.value = "";
+  form.elements.confirmPassword.value = "";
+  $("accountDialog").close();
+  toast("管理员账户已更新，其他登录会话已失效");
+}
+
+async function logout() {
+  await api("/api/auth/logout", { method: "POST", body: "{}" });
+  $("accountDialog").close();
+  state.servers = [];
+  state.active = null;
+  showAuthGate(false);
+}
+
+async function bootstrapAuth() {
+  const data = await api("/api/auth/status");
+  if (!data.authenticated) return showAuthGate(Boolean(data.needsSetup));
+  acceptAuth(data);
+  await startPanel();
+}
+
+async function startPanel() {
+  await loadVersions().catch(() => {});
+  await refresh();
+  clearInterval(state.liveLogTimer);
+  clearInterval(state.resourceTimer);
+  state.liveLogTimer = setInterval(() => refreshLiveLogs().catch(() => {}), 3000);
+  state.resourceTimer = setInterval(() => refreshResources().catch(() => {}), 5000);
 }
 
 async function refresh() {
@@ -125,6 +224,9 @@ function renderActive() {
     $("fileList").innerHTML = "";
     $("fileText").value = "";
     $("commandOutput").textContent = "";
+    renderRestartSettings(null);
+    renderFrp(null);
+    $("frpLogsBox").textContent = "尚未启用 FRP。";
     $("liveLogsBox").textContent = "还没有服务器，暂无实时日志。";
     $("liveLogStatus").textContent = "等待服务器";
     renderResources(null);
@@ -143,6 +245,8 @@ function renderActive() {
   renderProps(server);
   renderWorlds(server);
   renderBackups(server);
+  renderRestartSettings(server);
+  renderFrp(server.frp);
   renderAllowlist(server);
   renderPacks(server);
   if (state.view === "details") loadFileList(state.fileDir || "").catch(showError);
@@ -159,15 +263,18 @@ function renderActive() {
 }
 
 function renderProps(server) {
-  $("propsForm").innerHTML = KEY_FIELDS.map(([key, label, type, values]) => {
+  $("propsForm").innerHTML = KEY_FIELDS.map(([key, label, type, options]) => {
     const value = server.properties[key] ?? "";
     if (type === "select") {
-      return `<label>${label}<select name="${key}">${values.map((item) => `<option ${item === value ? "selected" : ""}>${item}</option>`).join("")}</select></label>`;
+      return `<label>${label}<select name="${key}">${options.map((item) => `<option ${item === value ? "selected" : ""}>${item}</option>`).join("")}</select></label>`;
     }
     if (type === "bool") {
       return `<label class="check"><input name="${key}" type="checkbox" ${String(value) === "true" ? "checked" : ""}> ${label}</label>`;
     }
-    return `<label>${label}<input name="${key}" type="${type}" value="${escapeAttr(value)}"></label>`;
+    const constraints = type === "number" && options
+      ? `${options.min !== undefined ? ` min="${options.min}"` : ""}${options.max !== undefined ? ` max="${options.max}"` : ""} step="1"`
+      : "";
+    return `<label>${label}<input name="${key}" type="${type}" value="${escapeAttr(value)}"${constraints}></label>`;
   }).join("");
 }
 
@@ -195,6 +302,149 @@ function renderBackups(server) {
   document.querySelectorAll("[data-restore-backup]").forEach((button) => {
     button.addEventListener("click", () => restoreListedBackup(button.dataset.restoreBackup).catch(showError));
   });
+}
+
+function renderRestartSettings(server) {
+  const settings = server && server.restartSettings || {};
+  const mode = settings.mode === "daily" ? "daily" : "interval";
+  $("restartEnabledInput").checked = Boolean(settings.enabled);
+  $("restartModeInput").value = mode;
+  $("restartIntervalInput").value = settings.intervalHours || 12;
+  $("restartDailyInput").value = settings.dailyTime || "04:00";
+  $("restartIntervalField").hidden = mode !== "interval";
+  $("restartDailyField").hidden = mode !== "daily";
+  $("restartTimezone").textContent = `当前时区：${localTimezoneLabel()}`;
+  $("restartPlanStatus").textContent = !settings.enabled
+    ? "未启用"
+    : mode === "daily"
+      ? `每天 ${settings.dailyTime || "04:00"}`
+      : `每 ${settings.intervalHours || 12} 小时`;
+  $("restartNextRun").textContent = settings.nextRunAt ? new Date(settings.nextRunAt).toLocaleString() : "-";
+  $("restartLastRun").textContent = settings.lastRunAt ? new Date(settings.lastRunAt).toLocaleString() : "尚未执行";
+  const resultLabels = { never: "-", success: "成功", skipped: "已跳过", error: "失败" };
+  $("restartLastResult").textContent = `${resultLabels[settings.lastResult] || "-"}${settings.lastMessage ? ` · ${settings.lastMessage}` : ""}`;
+}
+
+function localTimezoneLabel() {
+  const minutesEast = -new Date().getTimezoneOffset();
+  const sign = minutesEast >= 0 ? "+" : "-";
+  const absolute = Math.abs(minutesEast);
+  return `UTC${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
+}
+
+async function saveRestartSettings() {
+  const server = activeServer();
+  if (!server) return;
+  const data = await api(`/api/server/${server.name}/restart-schedule`, {
+    method: "PUT",
+    body: JSON.stringify({
+      enabled: $("restartEnabledInput").checked,
+      mode: $("restartModeInput").value,
+      intervalHours: $("restartIntervalInput").value,
+      dailyTime: $("restartDailyInput").value,
+      timezoneOffsetMinutes: -new Date().getTimezoneOffset()
+    })
+  });
+  server.restartSettings = data.settings;
+  renderRestartSettings(server);
+  toast("定时重启计划已保存");
+}
+
+async function refreshRestartSettings() {
+  const server = activeServer();
+  if (!server) return;
+  const data = await api(`/api/server/${server.name}/restart-schedule`);
+  server.restartSettings = data.settings;
+  renderRestartSettings(server);
+}
+
+function renderFrp(frp) {
+  const data = frp || { settings: {} };
+  const settings = data.settings || {};
+  $("frpEnabledInput").checked = Boolean(settings.enabled);
+  $("frpServerAddrInput").value = settings.serverAddr || "";
+  $("frpServerPortInput").value = settings.serverPort || 7000;
+  $("frpRemotePortInput").value = settings.remotePort || (activeServer() && activeServer().publishedPort) || 19132;
+  $("frpTlsInput").checked = settings.tlsEnabled !== false;
+  $("frpTokenInput").value = "";
+  $("frpTokenInput").placeholder = settings.tokenConfigured ? "令牌已保存，留空表示不修改" : "首次启用必须填写令牌";
+  $("frpStatus").textContent = !settings.enabled
+    ? "未启用"
+    : data.running
+      ? `运行中 · ${data.status || data.state}`
+      : `未运行 · ${data.status || data.state || "not-created"}`;
+  $("frpEndpoint").textContent = data.endpoint || "-";
+  $("frpTokenStatus").textContent = settings.tokenConfigured ? "已安全保存" : "未配置";
+  $("frpUpdatedAt").textContent = settings.updatedAt ? new Date(settings.updatedAt).toLocaleString() : "-";
+  $("frpImageLabel").textContent = data.serviceName || "frpc";
+  syncFrpFormRequirements();
+}
+
+function syncFrpFormRequirements() {
+  const enabled = $("frpEnabledInput").checked;
+  $("frpServerAddrInput").required = enabled;
+  $("frpServerPortInput").required = enabled;
+  $("frpRemotePortInput").required = enabled;
+}
+
+async function refreshFrp(loadLogs = true) {
+  const server = activeServer();
+  if (!server) return;
+  const data = await api(`/api/server/${server.name}/frp`);
+  server.frp = data;
+  renderFrp(data);
+  if (!loadLogs) return;
+  if (!data.settings.enabled && data.state === "not-created") {
+    $("frpLogsBox").textContent = "尚未启用 FRP。";
+    return;
+  }
+  try {
+    const logs = await api(`/api/server/${server.name}/frp/logs?tail=180`);
+    $("frpLogsBox").textContent = logs.logs || "(暂无 frpc 日志)";
+    $("frpLogsBox").scrollTop = $("frpLogsBox").scrollHeight;
+  } catch (error) {
+    $("frpLogsBox").textContent = error.message || "读取 frpc 日志失败";
+  }
+}
+
+async function saveFrp(event) {
+  event.preventDefault();
+  const server = activeServer();
+  const enabled = $("frpEnabledInput").checked;
+  syncFrpFormRequirements();
+  if (!server || !event.currentTarget.reportValidity()) return;
+  const token = $("frpTokenInput").value;
+  if (enabled && !token && !(server.frp && server.frp.settings && server.frp.settings.tokenConfigured)) {
+    return toast("首次启用 FRP 必须填写认证令牌");
+  }
+  const data = await api(`/api/server/${server.name}/frp`, {
+    method: "PUT",
+    body: JSON.stringify({
+      enabled,
+      serverAddr: $("frpServerAddrInput").value.trim(),
+      serverPort: $("frpServerPortInput").value,
+      remotePort: $("frpRemotePortInput").value,
+      token,
+      tlsEnabled: $("frpTlsInput").checked
+    })
+  });
+  server.frp = data;
+  renderFrp(data);
+  toast(enabled ? "FRP 配置已应用" : "FRP 穿透已停用");
+  await refreshFrp(true);
+}
+
+async function frpAction(action) {
+  const server = activeServer();
+  if (!server) return;
+  const data = await api(`/api/server/${server.name}/frp/action`, {
+    method: "POST",
+    body: JSON.stringify({ action })
+  });
+  server.frp = data;
+  renderFrp(data);
+  toast(`FRP ${action === "start" ? "启动" : action === "stop" ? "停止" : "重启"}操作已完成`);
+  await refreshFrp(true);
 }
 
 function renderAllowlist(server) {
@@ -244,6 +494,7 @@ function formData(form) {
 async function saveProps() {
   const server = activeServer();
   if (!server) return;
+  if (!$('propsForm').reportValidity()) return;
   const properties = {};
   for (const [key, , type] of KEY_FIELDS) {
     const el = $("propsForm").elements[key];
@@ -560,6 +811,8 @@ function switchTab(tab) {
   document.querySelectorAll("[data-tab]").forEach((button) => button.classList.toggle("selected", button.dataset.tab === tab));
   document.querySelectorAll(".tab-page").forEach((page) => page.classList.toggle("active", page.id === `tab-${tab}`));
   if (tab === "files") loadFileList(state.fileDir || "").catch(showError);
+  if (tab === "restart") refreshRestartSettings().catch(showError);
+  if (tab === "frp") refreshFrp(true).catch(showError);
 }
 
 function enterDetailsView() {
@@ -614,6 +867,16 @@ function escapeAttr(value) {
 }
 
 function wire() {
+  $("setupForm").addEventListener("submit", (event) => submitAuthForm(event, true));
+  $("loginForm").addEventListener("submit", (event) => submitAuthForm(event, false));
+  $("accountBtn").addEventListener("click", () => {
+    $("accountForm").elements.username.value = state.username;
+    $("accountSignedIn").textContent = `当前登录：${state.username}`;
+    $("accountDialog").showModal();
+  });
+  $("closeAccountBtn").addEventListener("click", () => $("accountDialog").close());
+  $("logoutBtn").addEventListener("click", () => logout().catch(showError));
+  $("accountForm").addEventListener("submit", (event) => updateAccount(event).catch(showError));
   $("refreshBtn").addEventListener("click", () => refresh().catch(showError));
   $("refreshWorldsBtn").addEventListener("click", () => refresh().catch(showError));
   $("showDeployBtn").addEventListener("click", () => $("deployPanel").classList.add("open"));
@@ -629,6 +892,20 @@ function wire() {
   document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
   $("backupWorldBtn").addEventListener("click", () => backupWorld().catch(showError));
   $("saveBackupSettingsBtn").addEventListener("click", () => saveBackupSettings().catch(showError));
+  $("restartModeInput").addEventListener("change", () => renderRestartSettings({ restartSettings: {
+    ...(activeServer() && activeServer().restartSettings || {}),
+    enabled: $("restartEnabledInput").checked,
+    mode: $("restartModeInput").value,
+    intervalHours: $("restartIntervalInput").value,
+    dailyTime: $("restartDailyInput").value
+  } }));
+  $("saveRestartSettingsBtn").addEventListener("click", () => saveRestartSettings().catch(showError));
+  $("frpEnabledInput").addEventListener("change", syncFrpFormRequirements);
+  $("frpForm").addEventListener("submit", (event) => saveFrp(event).catch(showError));
+  $("refreshFrpBtn").addEventListener("click", () => refreshFrp(true).catch(showError));
+  document.querySelectorAll("[data-frp-action]").forEach((button) => {
+    button.addEventListener("click", () => frpAction(button.dataset.frpAction).catch(showError));
+  });
   $("refreshBackupsBtn").addEventListener("click", () => refreshBackups().catch(showError));
   $("deleteWorldBtn").addEventListener("click", () => deleteWorld().catch(showError));
   $("newWorldBtn").addEventListener("click", () => newWorld().catch(showError));
@@ -666,7 +943,7 @@ function formatBytes(bytes) {
 }
 
 wire();
-loadVersions().catch(() => {});
-refresh().catch(showError);
-state.liveLogTimer = setInterval(() => refreshLiveLogs().catch(() => {}), 3000);
-state.resourceTimer = setInterval(() => refreshResources().catch(() => {}), 5000);
+bootstrapAuth().catch((error) => {
+  showAuthGate(false);
+  $("authError").textContent = error.message || "无法连接面板";
+});
