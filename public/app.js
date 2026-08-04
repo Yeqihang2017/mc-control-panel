@@ -28,6 +28,7 @@ const state = {
   liveLogLoading: false,
   resourceTimer: null,
   resourceLoading: false,
+  playerTimer: null,
   view: "dashboard",
   username: "",
   csrfToken: ""
@@ -67,8 +68,10 @@ function showAuthGate(needsSetup) {
   state.csrfToken = "";
   clearInterval(state.liveLogTimer);
   clearInterval(state.resourceTimer);
+  clearInterval(state.playerTimer);
   state.liveLogTimer = null;
   state.resourceTimer = null;
+  state.playerTimer = null;
   $("authGate").hidden = false;
   $("appShell").hidden = true;
   $("setupForm").hidden = !needsSetup;
@@ -146,8 +149,10 @@ async function startPanel() {
   await refresh();
   clearInterval(state.liveLogTimer);
   clearInterval(state.resourceTimer);
+  clearInterval(state.playerTimer);
   state.liveLogTimer = setInterval(() => refreshLiveLogs().catch(() => {}), 3000);
   state.resourceTimer = setInterval(() => refreshResources().catch(() => {}), 5000);
+  state.playerTimer = setInterval(() => refreshPlayers().catch(() => {}), 15000);
 }
 
 async function refresh() {
@@ -189,22 +194,48 @@ function render() {
 }
 
 function renderServerList() {
-  $("serverList").innerHTML = state.servers.map((server) => `
-    <button class="server-card ${server.name === state.active ? "active" : ""}" data-server="${server.name}">
-      <strong>${escapeHtml(server.properties["server-name"] || server.name)}</strong>
-      <span>${escapeHtml(server.name)}</span>
-      <span class="pill ${stateClass(server)}">${escapeHtml(server.state || "not-created")} ${escapeHtml(server.health || "")}</span>
-    </button>
-  `).join("");
-  document.querySelectorAll("[data-server]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.active = button.dataset.server;
-      state.fileDir = "";
-      state.activeFile = "";
-      renderActive();
-      renderServerList();
-      if (state.view === "console") refreshLiveLogs().catch(showError);
-      refreshResources().catch(() => {});
+  $("serverList").innerHTML = state.servers.map((server) => {
+    const cls = stateClass(server);
+    const running = cls === "running";
+    return `
+      <div class="server-chip ${server.name === state.active ? "active" : ""}" data-server="${server.name}" role="button" tabindex="0" title="${escapeAttr(server.name)}">
+        <span class="status-orb ${cls}"></span>
+        <span class="chip-name">${escapeHtml(server.properties["server-name"] || server.name)}</span>
+        <span class="chip-port">${escapeHtml(String(server.publishedPort || "-"))}</span>
+        ${running
+          ? `<button class="chip-quick" data-quick-action="stop" data-server-name="${server.name}" title="停止">■</button>`
+          : `<button class="chip-quick" data-quick-action="${cls === "exited" ? "start" : "up"}" data-server-name="${server.name}" title="${cls === "exited" ? "启动" : "创建/启动"}">▶</button>`}
+      </div>
+    `;
+  }).join("") || `<span class="strip-empty">还没有服务器</span>`;
+  document.querySelectorAll("[data-server]").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("[data-quick-action]")) return; // 快速操作不触发选中
+      selectServer(card.dataset.server);
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        selectServer(card.dataset.server);
+      }
+    });
+  });
+  function selectServer(name) {
+    state.active = name;
+    state.fileDir = "";
+    state.activeFile = "";
+    renderActive();
+    renderServerList();
+    // 从任意视图切到这台服务器时,若当前在聚焦面板则自动跟进
+    if (state.view === "details") enterDetailsView();
+    if (state.view === "console") refreshLiveLogs().catch(showError);
+    refreshResources().catch(() => {});
+  }
+  document.querySelectorAll("[data-quick-action]").forEach((action) => {
+    action.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const serverName = action.dataset.serverName;
+      doAction(action.dataset.quickAction, serverName).catch(showError);
     });
   });
 }
@@ -229,19 +260,26 @@ function renderActive() {
     $("frpLogsBox").textContent = "尚未启用 FRP。";
     $("liveLogsBox").textContent = "还没有服务器，暂无实时日志。";
     $("liveLogStatus").textContent = "等待服务器";
+    const orb = $("heroOrb");
+    if (orb) orb.className = "status-orb";
+    renderPlayers(null);
     renderResources(null);
     return;
   }
 
   $("activeTitle").textContent = server.properties["server-name"] || server.name;
   $("activeSub").textContent = `${server.name} · UDP ${server.publishedPort || "-"} · ${server.status || server.state}`;
+  const orb = $("heroOrb");
+  if (orb) orb.className = `status-orb ${stateClass(server)}`;
   $("serverPath").textContent = server.dataPath;
   $("statusRow").innerHTML = `
-    <div class="stat"><span>状态</span><strong>${escapeHtml(server.status || server.state)}</strong></div>
+    <div class="stat"><span>状态</span><strong class="stat-${stateClass(server)}">${escapeHtml(server.status || server.state)}</strong></div>
     <div class="stat"><span>端口</span><strong>${escapeHtml(String(server.publishedPort || "-"))}/udp</strong></div>
     <div class="stat"><span>世界</span><strong>${server.worlds.length}</strong></div>
     <div class="stat"><span>自定义包</span><strong>${server.behaviorPacks.length + server.resourcePacks.length}</strong></div>
+    <div class="stat"><span>在线玩家</span><strong id="onlineStat">-</strong></div>
   `;
+  refreshPlayers().catch(() => {});
   renderProps(server);
   renderWorlds(server);
   renderBackups(server);
@@ -288,12 +326,14 @@ function renderBackups(server) {
   $("backupIntervalInput").value = settings.intervalMinutes || 30;
   $("backupMaxFilesInput").value = settings.maxFiles || 10;
   $("autoBackupEnabledInput").checked = Boolean(settings.autoEnabled);
+  $("consistentBackupInput").checked = settings.consistentBackup !== false;
   $("backupList").innerHTML = server.backups && server.backups.length
     ? server.backups.map((backup) => `
       <div class="backup-row">
         <div>
           <strong>${escapeHtml(backup.name)}</strong>
           <span>${backup.type === "auto" ? "自动" : "手动"} · ${new Date(backup.mtime).toLocaleString()} · ${formatBytes(backup.size)}</span>
+          ${backup.location ? `<span>${escapeHtml(backup.location)}</span>` : ""}
         </div>
         <button data-restore-backup="${escapeAttr(backup.path)}">还原</button>
       </div>
@@ -474,11 +514,15 @@ function renderPacks(server) {
     : `<span class="chip">暂无自定义 Resource Pack</span>`;
 }
 
-async function doAction(action) {
-  const server = activeServer();
+async function doAction(action, serverName = null) {
+  const server = serverName ? state.servers.find((item) => item.name === serverName) : activeServer();
   if (!server) return;
+  // 智能启动：未创建时用 up 创建容器，已创建时用 start 启动
+  if (action === "start" && String(server.state || "").toLowerCase() === "not-created") {
+    action = "up";
+  }
   await api(`/api/server/${server.name}/action`, { method: "POST", body: JSON.stringify({ action }) });
-  toast("操作已发送");
+  toast(action === "up" ? "服务器已创建并启动" : "操作已发送");
   await refresh();
 }
 
@@ -509,12 +553,13 @@ async function deploy(event) {
   event.preventDefault();
   const body = formData(event.currentTarget);
   if (body.forceOverwriteDataDir) {
-    const ok = confirm("强制覆盖会删除同名数据目录里的世界、配置、模组和备份。确定继续部署吗？");
+    const target = body.dataDir ? `\n\n目标目录：${body.dataDir}` : "";
+    const ok = confirm(`强制覆盖会删除目标数据目录里的世界、配置、模组和备份。确定继续部署吗？${target}`);
     if (!ok) return;
   }
   await api("/api/deploy", { method: "POST", body: JSON.stringify(body) });
   toast("部署完成");
-  $("deployPanel").classList.remove("open");
+  closeLayer();
   await refresh();
 }
 
@@ -537,8 +582,11 @@ async function backupWorld() {
   const server = activeServer();
   const worldName = $("worldSelect").value;
   if (!server || !worldName) return;
-  await api(`/api/server/${server.name}/world/backup`, { method: "POST", body: JSON.stringify({ worldName, type: "manual" }) });
-  toast("世界已备份");
+  const data = await api(`/api/server/${server.name}/world/backup`, { method: "POST", body: JSON.stringify({ worldName, type: "manual" }) });
+  const backup = data.backup || {};
+  if (backup.restartFailed) toast("世界已备份，但服务器重启失败！");
+  else if (backup.consistent) toast("世界已备份（已停机保存并自动重启）");
+  else toast("世界已备份");
   await refresh();
 }
 
@@ -551,7 +599,8 @@ async function saveBackupSettings() {
       backupDir: $("backupDirInput").value.trim() || "backups",
       autoEnabled: $("autoBackupEnabledInput").checked,
       intervalMinutes: $("backupIntervalInput").value,
-      maxFiles: $("backupMaxFilesInput").value
+      maxFiles: $("backupMaxFilesInput").value,
+      consistentBackup: $("consistentBackupInput").checked
     })
   });
   toast("备份设置已保存");
@@ -676,6 +725,7 @@ async function deleteServer() {
   if (!server) return;
   const confirmName = $("deleteServerName").value.trim();
   const deleteDataDir = $("deleteServerData").checked;
+  const confirmDataPath = $("deleteServerDataPath").value.trim();
   if (confirmName !== server.name) return toast("请输入完全一致的服务器名");
   const warning = deleteDataDir
     ? `将删除服务器 ${server.name}，并删除数据目录。此操作不可恢复，确定继续？`
@@ -683,10 +733,11 @@ async function deleteServer() {
   if (!confirm(warning)) return;
   await api(`/api/server/${server.name}/delete`, {
     method: "POST",
-    body: JSON.stringify({ confirmName, deleteDataDir })
+    body: JSON.stringify({ confirmName, deleteDataDir, confirmDataPath })
   });
   $("deleteServerName").value = "";
   $("deleteServerData").checked = false;
+  $("deleteServerDataPath").value = "";
   leaveDetailsView();
   toast("服务器已删除");
   await refresh();
@@ -694,7 +745,7 @@ async function deleteServer() {
 
 async function loadLogs(mode = state.logMode) {
   state.logMode = mode;
-  $("logsPanel").classList.add("open");
+  openLayer("logsPanel");
   $("logsBox").textContent = "读取中...";
   document.querySelectorAll("[data-log-mode]").forEach((button) => button.classList.toggle("selected", button.dataset.logMode === mode));
   if (mode === "panel") {
@@ -766,6 +817,34 @@ async function refreshResources() {
   }
 }
 
+function renderPlayers(data) {
+  const players = (data && data.players) || [];
+  const online = $("onlineStat");
+  const box = $("onlinePlayersBox");
+  const status = $("onlinePlayersStatus");
+  if (!online || !box || !status) return;
+  online.textContent = players.length ? String(players.length) : "-";
+  box.innerHTML = players.length
+    ? players.map((player) => `<span class="chip player-chip">${escapeHtml(player.name)}</span>`).join("")
+    : `<span class="chip empty-chip">暂无玩家在线</span>`;
+  status.textContent = data
+    ? `刷新于 ${new Date().toLocaleTimeString()}`
+    : "等待服务器";
+}
+
+async function refreshPlayers() {
+  if (state.view !== "dashboard") return;
+  const server = activeServer();
+  if (!server) return renderPlayers(null);
+  $("onlinePlayersStatus").textContent = "刷新中...";
+  try {
+    const data = await api(`/api/server/${server.name}/players`);
+    renderPlayers(data);
+  } catch (error) {
+    renderPlayers({ players: [], message: error.message || "读取失败" });
+  }
+}
+
 async function loadFileList(dir) {
   const server = activeServer();
   if (!server) return;
@@ -808,19 +887,34 @@ async function saveFile() {
 
 function switchTab(tab) {
   state.tab = tab;
-  document.querySelectorAll("[data-tab]").forEach((button) => button.classList.toggle("selected", button.dataset.tab === tab));
+  // 二级导航高亮(详情层左侧纵向列表)
+  document.querySelectorAll(".detail-nav [data-tab]").forEach((button) => button.classList.toggle("selected", button.dataset.tab === tab));
+  // 保留兼容旧横向 tabs 的高亮
+  document.querySelectorAll(".tabs [data-tab]").forEach((button) => button.classList.toggle("selected", button.dataset.tab === tab));
   document.querySelectorAll(".tab-page").forEach((page) => page.classList.toggle("active", page.id === `tab-${tab}`));
   if (tab === "files") loadFileList(state.fileDir || "").catch(showError);
   if (tab === "restart") refreshRestartSettings().catch(showError);
   if (tab === "frp") refreshFrp(true).catch(showError);
 }
 
+function openLayer(id) {
+  document.querySelectorAll(".focus-layer").forEach((layer) => layer.classList.remove("active"));
+  $(id).classList.add("active");
+  document.body.classList.add("layer-open");
+  const layer = $(id);
+  if (layer) layer.scrollTop = 0;
+}
+
+function closeLayer() {
+  document.querySelectorAll(".focus-layer").forEach((layer) => layer.classList.remove("active"));
+  document.body.classList.remove("layer-open");
+}
+
 function enterDetailsView() {
   const server = activeServer();
   if (!server) return toast("请选择服务器");
   state.view = "details";
-  document.querySelector(".main").classList.add("details-mode");
-  $("detailsPanel").classList.add("open");
+  openLayer("detailsPanel");
   $("activeTitle").textContent = "服务器详情";
   $("activeSub").textContent = `${server.name} · ${server.properties["server-name"] || server.name}`;
   switchTab(state.tab);
@@ -828,8 +922,7 @@ function enterDetailsView() {
 
 function leaveDetailsView() {
   state.view = "dashboard";
-  document.querySelector(".main").classList.remove("details-mode");
-  $("detailsPanel").classList.remove("open");
+  closeLayer();
   renderActive();
 }
 
@@ -837,8 +930,7 @@ function enterConsoleView() {
   const server = activeServer();
   if (!server) return toast("请选择服务器");
   state.view = "console";
-  document.querySelector(".main").classList.add("console-mode");
-  $("consolePanel").classList.add("open");
+  openLayer("consolePanel");
   $("activeTitle").textContent = "控制台";
   $("activeSub").textContent = `${server.name} · ${server.properties["server-name"] || server.name}`;
   refreshLiveLogs().catch(showError);
@@ -846,8 +938,7 @@ function enterConsoleView() {
 
 function leaveConsoleView() {
   state.view = "dashboard";
-  document.querySelector(".main").classList.remove("console-mode");
-  $("consolePanel").classList.remove("open");
+  closeLayer();
   renderActive();
 }
 
@@ -879,8 +970,8 @@ function wire() {
   $("accountForm").addEventListener("submit", (event) => updateAccount(event).catch(showError));
   $("refreshBtn").addEventListener("click", () => refresh().catch(showError));
   $("refreshWorldsBtn").addEventListener("click", () => refresh().catch(showError));
-  $("showDeployBtn").addEventListener("click", () => $("deployPanel").classList.add("open"));
-  $("hideDeployBtn").addEventListener("click", () => $("deployPanel").classList.remove("open"));
+  $("showDeployBtn").addEventListener("click", () => openLayer("deployPanel"));
+  $("hideDeployBtn").addEventListener("click", () => closeLayer());
   $("openDetailsBtn").addEventListener("click", () => enterDetailsView());
   $("closeDetailsBtn").addEventListener("click", () => leaveDetailsView());
   $("openConsoleBtn").addEventListener("click", () => enterConsoleView());
@@ -923,8 +1014,9 @@ function wire() {
   $("refreshLiveLogsBtn").addEventListener("click", () => refreshLiveLogs().catch(showError));
   $("refreshResourcesBtn").addEventListener("click", () => refreshResources().catch(showError));
   $("refreshLogsBtn").addEventListener("click", () => loadLogs(state.logMode).catch(showError));
-  $("closeLogsBtn").addEventListener("click", () => $("logsPanel").classList.remove("open"));
+  $("closeLogsBtn").addEventListener("click", () => closeLayer());
   document.querySelectorAll("[data-log-mode]").forEach((button) => button.addEventListener("click", () => loadLogs(button.dataset.logMode).catch(showError)));
+  $("refreshPlayersBtn").addEventListener("click", () => refreshPlayers().catch(showError));
   $("fileUpBtn").addEventListener("click", () => loadFileList(upDir(state.fileDir)).catch(showError));
   $("saveFileBtn").addEventListener("click", () => saveFile().catch(showError));
 }

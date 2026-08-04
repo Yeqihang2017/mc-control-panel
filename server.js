@@ -69,7 +69,8 @@ const DEFAULT_BACKUP_SETTINGS = {
   backupDir: "backups",
   autoEnabled: false,
   intervalMinutes: 30,
-  maxFiles: 10
+  maxFiles: 10,
+  consistentBackup: true
 };
 
 const DEFAULT_RESTART_SETTINGS = {
@@ -377,19 +378,107 @@ function safePath(base, relativePath = "") {
   return target;
 }
 
+function isSameOrInside(base, target) {
+  const root = path.resolve(base);
+  const resolved = path.resolve(target);
+  if (process.platform === "win32") {
+    const left = root.toLowerCase();
+    const right = resolved.toLowerCase();
+    return right === left || right.startsWith(left + path.sep);
+  }
+  return resolved === root || resolved.startsWith(root + path.sep);
+}
+
+function normalizeForwardPath(value) {
+  return String(value || "").replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function parsePathMappings() {
+  const mappings = [{ containerRoot: path.resolve(DATA_ROOT), hostRoot: normalizeForwardPath(HOST_DATA_ROOT) }];
+  const raw = String(process.env.PANEL_PATH_MAPPINGS || "").trim();
+  for (const item of raw.split(/[;\n]/)) {
+    const line = item.trim();
+    if (!line) continue;
+    const index = line.indexOf("=");
+    if (index < 1) continue;
+    const containerRoot = path.resolve(line.slice(0, index).trim());
+    const hostRoot = normalizeForwardPath(line.slice(index + 1).trim());
+    if (!hostRoot) continue;
+    if (!mappings.some((mapping) => mapping.containerRoot === containerRoot && mapping.hostRoot === hostRoot)) {
+      mappings.push({ containerRoot, hostRoot });
+    }
+  }
+  return mappings.sort((a, b) => b.containerRoot.length - a.containerRoot.length);
+}
+
+function pathMappings() {
+  if (!pathMappings.cache) pathMappings.cache = parsePathMappings();
+  return pathMappings.cache;
+}
+
+function joinHostPath(hostRoot, relativePath) {
+  const normalizedRoot = normalizeForwardPath(hostRoot);
+  const normalizedRelative = String(relativePath || "").replace(/\\/g, "/").replace(/^\/+/, "");
+  return normalizedRelative ? `${normalizedRoot}/${normalizedRelative}` : normalizedRoot;
+}
+
 function dockerBindPath(localPath) {
-  const relative = path.relative(DATA_ROOT, localPath);
-  return path.join(HOST_DATA_ROOT, relative).replace(/\\/g, "/");
+  const resolved = path.resolve(localPath);
+  const mapping = pathMappings().find((item) => isSameOrInside(item.containerRoot, resolved));
+  if (!mapping) {
+    throw httpError(400, "目录不在面板可访问的 Docker 挂载范围内。请使用 /data/...、/host-data/...、/hostfs/...，或填写 Windows 绝对路径。");
+  }
+  return joinHostPath(mapping.hostRoot, path.relative(mapping.containerRoot, resolved));
 }
 
 function panelPathFromDockerBind(sourcePath) {
   const source = String(sourcePath || "").replace(/\\/g, "/");
-  const hostRoot = String(HOST_DATA_ROOT || "").replace(/\\/g, "/").replace(/\/+$/, "");
-  if (hostRoot && (source === hostRoot || source.startsWith(hostRoot + "/"))) {
-    const relative = source.slice(hostRoot.length).replace(/^\/+/, "");
-    return path.join(DATA_ROOT, relative);
+  for (const mapping of pathMappings()) {
+    const hostRoot = normalizeForwardPath(mapping.hostRoot);
+    if (hostRoot && (source === hostRoot || source.startsWith(hostRoot + "/"))) {
+      const relative = source.slice(hostRoot.length).replace(/^\/+/, "");
+      return path.join(mapping.containerRoot, relative);
+    }
   }
   return path.resolve(sourcePath);
+}
+
+function resolvePanelDirectoryInput(input, fallbackDir, label) {
+  return normalizeUserDirectoryPath(input, label, fallbackDir, DATA_ROOT);
+}
+
+function assertSafeDirectoryRemoval(target, label = "目录") {
+  const resolved = path.resolve(target);
+  if (resolved === path.parse(resolved).root) throw httpError(400, `${label}不能是磁盘根目录。`);
+  const protectedRoots = [DATA_ROOT, SERVERS_DIR, APP_ROOT, ...pathMappings().map((mapping) => mapping.containerRoot)];
+  if (protectedRoots.some((root) => path.resolve(root) === resolved)) {
+    throw httpError(400, `${label}不能是面板根目录、服务器总目录或挂载根目录。`);
+  }
+}
+
+function hostfsPathFromWindowsPath(raw, label) {
+  const windows = String(raw || "").trim().replace(/^["']|["']$/g, "").match(/^([A-Za-z]):[\\/]*(.*)$/);
+  if (windows) {
+    const drive = windows[1].toLowerCase();
+    const rest = windows[2].replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    if (!rest) throw httpError(400, `${label}不能是磁盘根目录，请选择一个具体文件夹。`);
+    return `/hostfs/${drive}/${rest}`;
+  }
+  return "";
+}
+
+function normalizeUserDirectoryPath(raw, label, fallbackDir, relativeRoot) {
+  const value = String(raw || "").trim().replace(/^["']|["']$/g, "");
+  if (!value) return path.resolve(fallbackDir);
+  if (/[\0\r\n;]/.test(value)) throw httpError(400, `${label}不能包含换行、空字符或分号。`);
+  const hostfsPath = hostfsPathFromWindowsPath(value, label);
+  const target = hostfsPath
+    ? path.resolve(hostfsPath)
+    : path.isAbsolute(value)
+      ? path.resolve(value)
+      : safePath(relativeRoot, value);
+  dockerBindPath(target);
+  return target;
 }
 
 function parseProperties(text) {
@@ -531,7 +620,8 @@ function normalizeBackupSettings(settings = {}) {
     backupDir: String(settings.backupDir || DEFAULT_BACKUP_SETTINGS.backupDir).trim() || DEFAULT_BACKUP_SETTINGS.backupDir,
     autoEnabled: Boolean(settings.autoEnabled),
     intervalMinutes,
-    maxFiles
+    maxFiles,
+    consistentBackup: settings.consistentBackup !== false
   };
 }
 
@@ -717,15 +807,7 @@ function visibleServerPath(dataPath, relativePath) {
 
 function resolveBackupRoot(dataPath, backupDir) {
   const value = String(backupDir || DEFAULT_BACKUP_SETTINGS.backupDir).trim();
-  if (path.isAbsolute(value)) {
-    const target = path.resolve(value);
-    const relative = path.relative(DATA_ROOT, target);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw httpError(400, "备份目录必须位于面板数据目录内。");
-    }
-    return target;
-  }
-  return safePath(dataPath, value);
+  return normalizeUserDirectoryPath(value, "备份目录", path.join(dataPath, DEFAULT_BACKUP_SETTINGS.backupDir), dataPath);
 }
 
 async function getBackupDirs(dataPath, settings = null) {
@@ -751,7 +833,8 @@ async function listBackupEntries(dataPath, limit = 12) {
       entries.push({
         name,
         type,
-        path: path.relative(DATA_ROOT, file).replace(/\\/g, "/"),
+        path: backupPathToken(file),
+        location: path.dirname(file),
         size: stat.size,
         mtime: stat.mtime.toISOString()
       });
@@ -1004,6 +1087,12 @@ async function readFrpLogs(serviceName, dataPath, localPort, tail = 160) {
 async function deleteServer(name, body) {
   if (body.confirmName !== name) throw httpError(400, "请输入完全一致的服务器名确认删除。");
   const { dataPath } = await getServer(name);
+  if (body.deleteDataDir) {
+    assertSafeDirectoryRemoval(dataPath, "数据目录");
+    if (!isSameOrInside(SERVERS_DIR, dataPath) && String(body.confirmDataPath || "").trim() !== dataPath) {
+      throw httpError(400, "自定义数据目录需要输入完整目录路径确认删除。");
+    }
+  }
   const composeBefore = await fsp.readFile(COMPOSE_FILE, "utf8");
   const restartTimer = restartTimers.get(name);
   if (restartTimer) clearTimeout(restartTimer.timer);
@@ -1024,10 +1113,6 @@ async function deleteServer(name, body) {
   await fsp.writeFile(COMPOSE_FILE, removeServiceFromComposeText(withoutProxy, name), "utf8");
 
   if (body.deleteDataDir) {
-    const relative = path.relative(SERVERS_DIR, dataPath);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw httpError(400, "数据目录不在面板 servers 目录内，已拒绝删除。");
-    }
     await fsp.rm(dataPath, { recursive: true, force: true });
   }
 
@@ -1075,12 +1160,14 @@ async function deployServer(body) {
     }
   }
 
-  const dataDirName = slugify(body.folderName || serviceName, serviceName);
-  const dataDir = path.join(SERVERS_DIR, dataDirName);
+  const defaultDataDir = path.join(SERVERS_DIR, slugify(body.folderName || serviceName, serviceName));
+  const dataDir = resolvePanelDirectoryInput(body.dataDir, defaultDataDir, "服务器文件目录");
+  assertSafeDirectoryRemoval(dataDir, "服务器文件目录");
   if (await exists(dataDir)) {
     if (!body.forceOverwriteDataDir) {
       throw httpError(409, `数据目录已存在：${dataDir}`);
     }
+    assertSafeDirectoryRemoval(dataDir, "数据目录");
     await fsp.rm(dataDir, { recursive: true, force: true });
     logEvent("warn", "force overwritten data directory", { serviceName, dataDir });
   }
@@ -1148,7 +1235,14 @@ async function zipDirectory(sourceDir, zipPath) {
   }
 }
 
-async function backupWorld(dataPath, worldName, type = "manual") {
+async function isServiceRunning(name) {
+  const rows = await getPsRows().catch(() => []);
+  const row = rows.find((item) => item.Service === name);
+  return String(row && row.State || "").toLowerCase() === "running"
+    && !String(row && row.Status || "").toLowerCase().includes("paused");
+}
+
+async function backupWorld(dataPath, worldName, type = "manual", serviceName = null) {
   if (!worldName) throw httpError(400, "请选择世界。");
   const worldPath = safePath(path.join(dataPath, "worlds"), worldName);
   const stat = await fsp.stat(worldPath).catch(() => null);
@@ -1159,16 +1253,39 @@ async function backupWorld(dataPath, worldName, type = "manual") {
   await ensureDir(backupDir);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const zipPath = path.join(backupDir, `${slugify(worldName)}-${stamp}.zip`);
-  await zipDirectory(worldPath, zipPath);
+  const shouldStop = Boolean(serviceName) && settings.consistentBackup && await isServiceRunning(serviceName);
+  let stoppedForBackup = false;
+  if (shouldStop) {
+    logEvent("info", "stopping server for consistent backup", { serviceName, worldName });
+    await dockerCompose(["stop", "--timeout", "120", serviceName], { maxBuffer: 30 * 1024 * 1024 });
+    stoppedForBackup = true;
+  }
+  let restartFailed = false;
+  try {
+    await zipDirectory(worldPath, zipPath);
+  } finally {
+    if (stoppedForBackup) {
+      try {
+        await dockerCompose(["start", serviceName], { maxBuffer: 30 * 1024 * 1024 });
+        logEvent("info", "restarted server after backup", { serviceName });
+      } catch (error) {
+        restartFailed = true;
+        logEvent("error", "failed to restart server after backup", { serviceName, message: error.message });
+      }
+    }
+  }
   if (type === "auto") await pruneAutoBackups(dataPath, settings);
   const backup = {
     name: path.basename(zipPath),
     type,
-    path: path.relative(DATA_ROOT, zipPath).replace(/\\/g, "/"),
+    path: backupPathToken(zipPath),
+    location: path.dirname(zipPath),
     size: (await fsp.stat(zipPath)).size,
-    mtime: new Date().toISOString()
+    mtime: new Date().toISOString(),
+    consistent: stoppedForBackup,
+    restartFailed
   };
-  logEvent("info", "backed up world", { worldName, zipPath, type });
+  logEvent("info", "backed up world", { worldName, zipPath, type, stoppedForBackup, restartFailed });
   return backup;
 }
 
@@ -1188,9 +1305,9 @@ async function pruneAutoBackups(dataPath, settings = null) {
   }
 }
 
-async function deleteWorld(dataPath, body) {
+async function deleteWorld(dataPath, body, serviceName = null) {
   const worldName = body.worldName;
-  const backup = body.backupFirst ? await backupWorld(dataPath, worldName, "manual") : null;
+  const backup = body.backupFirst ? await backupWorld(dataPath, worldName, "manual", serviceName) : null;
   await fsp.rm(safePath(path.join(dataPath, "worlds"), worldName), { recursive: true, force: true });
   logEvent("info", "deleted world", { worldName, backupName: backup && backup.name });
   return { deleted: worldName, backupName: backup && backup.name };
@@ -1246,14 +1363,14 @@ async function findDirectoriesContaining(root, fileName, found = []) {
   return found;
 }
 
-async function replaceWorldFromZip(dataPath, body) {
+async function replaceWorldFromZip(dataPath, body, serviceName = null) {
   const targetName = String(body.targetWorldName || "").trim();
   if (!targetName || /[\\/:*?"<>|\r\n\t\f]/.test(targetName)) throw httpError(400, "目标世界名不合法。");
   const { file } = await saveUploadToTemp(body.fileName, body.contentBase64);
-  return await restoreWorldFromZip(dataPath, file, targetName, Boolean(body.replaceExisting), true);
+  return await restoreWorldFromZip(dataPath, file, targetName, Boolean(body.replaceExisting), true, serviceName);
 }
 
-async function restoreWorldFromZip(dataPath, zipFile, targetName, replaceExisting = true, cleanupZip = false) {
+async function restoreWorldFromZip(dataPath, zipFile, targetName, replaceExisting = true, cleanupZip = false, serviceName = null) {
   const extractDir = zipFile.replace(/\.zip$/, "-expanded");
   await expandArchive(zipFile, extractDir);
   const worldDirs = await findDirectoriesContaining(extractDir, "level.dat");
@@ -1268,7 +1385,7 @@ async function restoreWorldFromZip(dataPath, zipFile, targetName, replaceExistin
   let backupName = null;
   if (targetExists) {
     if (!replaceExisting) throw httpError(409, "????????");
-    const backup = await backupWorld(dataPath, targetName, "manual");
+    const backup = await backupWorld(dataPath, targetName, "manual", serviceName);
     backupName = backup.name;
     await fsp.rm(target, { recursive: true, force: true });
   }
@@ -1279,18 +1396,40 @@ async function restoreWorldFromZip(dataPath, zipFile, targetName, replaceExistin
   return { worldName: targetName, backupName };
 }
 
-function backupFileFromRelative(relativePath) {
-  const file = safePath(DATA_ROOT, relativePath);
-  if (!file.toLowerCase().endsWith(".zip")) throw httpError(400, "???? zip ?????");
+function backupPathToken(file) {
+  return Buffer.from(path.resolve(file), "utf8").toString("base64url");
+}
+
+function backupFileFromToken(reference) {
+  const raw = String(reference || "").trim();
+  if (!raw) throw httpError(400, "请选择备份文件。");
+  if (/[\\/]/.test(raw) || raw.toLowerCase().endsWith(".zip")) return safePath(DATA_ROOT, raw);
+  if (!/^[A-Za-z0-9_-]+$/.test(raw)) throw httpError(400, "备份文件引用无效。");
+  try {
+    const decoded = Buffer.from(raw, "base64url").toString("utf8");
+    if (decoded) return path.resolve(decoded);
+  } catch {
+    // Older panel versions used a relative path from DATA_ROOT.
+  }
+  return safePath(DATA_ROOT, raw);
+}
+
+async function backupFileFromReference(dataPath, reference) {
+  const file = backupFileFromToken(reference);
+  if (!file.toLowerCase().endsWith(".zip")) throw httpError(400, "只能还原 zip 备份文件。");
+  const dirs = await getBackupDirs(dataPath);
+  if (!isSameOrInside(dirs.root, file)) {
+    throw httpError(400, "备份文件不在当前服务器配置的备份目录内。");
+  }
   return file;
 }
 
-async function restoreBackup(dataPath, body) {
+async function restoreBackup(dataPath, body, serviceName = null) {
   const targetName = String(body.targetWorldName || "").trim();
-  if (!targetName || /[\\/:*?"<>|\r\n\t\f]/.test(targetName)) throw httpError(400, "?????????");
-  const file = backupFileFromRelative(body.backupPath || "");
-  if (!(await exists(file))) throw httpError(404, "????????");
-  return await restoreWorldFromZip(dataPath, file, targetName, true, false);
+  if (!targetName || /[\\/:*?"<>|\r\n\t\f]/.test(targetName)) throw httpError(400, "目标世界名不合法。");
+  const file = await backupFileFromReference(dataPath, body.backupPath || "");
+  if (!(await exists(file))) throw httpError(404, "备份文件不存在。");
+  return await restoreWorldFromZip(dataPath, file, targetName, true, false, serviceName);
 }
 
 async function saveBackupSettings(dataPath, body) {
@@ -1315,7 +1454,7 @@ async function runAutoBackup(serviceName, dataPath) {
   try {
     const worldName = await chooseAutoBackupWorld(dataPath);
     if (!worldName) return logEvent("warn", "auto backup skipped: no world", { serviceName });
-    await backupWorld(dataPath, worldName, "auto");
+    await backupWorld(dataPath, worldName, "auto", serviceName);
   } catch (error) {
     logEvent("error", "auto backup failed", { serviceName, message: error.message });
   }
@@ -1535,6 +1674,34 @@ async function sendServerCommand(name, command) {
   const result = await dockerCompose(["exec", "-T", name, "send-command", clean], { maxBuffer: 10 * 1024 * 1024 });
   logEvent("info", "sent server command", { service: name, command: clean, output: trimLog(result.stdout || result.stderr) });
   return { output: result.stdout || result.stderr || "指令已发送。" };
+}
+
+async function getOnlinePlayers(name) {
+  const { service } = await getServer(name);
+  const container = service.container_name || `mc-panel-${name}`;
+  const result = await dockerCompose(["logs", "--tail", "1000", name], { maxBuffer: 30 * 1024 * 1024 }).catch(() => null);
+  if (!result) return { available: false, container, players: [], count: 0, message: "读取日志失败。" };
+  const text = String(result.stdout || result.stderr || "");
+  const players = [];
+  const index = new Map();
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/Player (connected|disconnected): (.+?), xuid: (\d+)/i);
+    if (!match) continue;
+    const [, event, playerName, xuid] = match;
+    if (event.toLowerCase() === "connected") {
+      if (!index.has(xuid)) {
+        const entry = { name: playerName, xuid };
+        index.set(xuid, entry);
+        players.push(entry);
+      }
+    } else if (index.has(xuid)) {
+      const entry = index.get(xuid);
+      index.delete(xuid);
+      const pos = players.indexOf(entry);
+      if (pos >= 0) players.splice(pos, 1);
+    }
+  }
+  return { available: true, container, players, count: players.length, refreshedAt: new Date().toISOString() };
 }
 
 async function getServerResources(name) {
@@ -1781,6 +1948,10 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, await getServerResources(name));
     }
 
+    if (req.method === "GET" && parts[3] === "players") {
+      return sendJson(res, 200, await getOnlinePlayers(name));
+    }
+
     if (parts[3] === "frp") {
       const properties = await readServerProperties(dataPath);
       const localPort = assertPort(properties["server-port"] || 19132, "Minecraft 本地端口");
@@ -1829,7 +2000,7 @@ async function handleApi(req, res, url) {
     }
     if (req.method === "POST" && parts[3] === "world" && parts[4] === "backup") {
       const body = await readBody(req);
-      return sendJson(res, 200, { backup: await backupWorld(dataPath, body.worldName, body.type || "manual") });
+      return sendJson(res, 200, { backup: await backupWorld(dataPath, body.worldName, body.type || "manual", name) });
     }
     if (req.method === "GET" && parts[3] === "world" && parts[4] === "backups") {
       return sendJson(res, 200, { backups: await listBackupEntries(dataPath, 30), settings: await getBackupSettings(dataPath) });
@@ -1838,16 +2009,16 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { settings: await saveBackupSettings(dataPath, await readBody(req)) });
     }
     if (req.method === "POST" && parts[3] === "world" && parts[4] === "restore") {
-      return sendJson(res, 200, await restoreBackup(dataPath, await readBody(req)));
+      return sendJson(res, 200, await restoreBackup(dataPath, await readBody(req), name));
     }
     if (req.method === "POST" && parts[3] === "world" && parts[4] === "delete") {
-      return sendJson(res, 200, await deleteWorld(dataPath, await readBody(req)));
+      return sendJson(res, 200, await deleteWorld(dataPath, await readBody(req), name));
     }
     if (req.method === "POST" && parts[3] === "world" && parts[4] === "new") {
       return sendJson(res, 200, await newWorld(dataPath, await readBody(req)));
     }
     if (req.method === "POST" && parts[3] === "world" && parts[4] === "upload") {
-      return sendJson(res, 200, await replaceWorldFromZip(dataPath, await readBody(req)));
+      return sendJson(res, 200, await replaceWorldFromZip(dataPath, await readBody(req), name));
     }
     if (req.method === "GET" && parts[3] === "allowlist") {
       return sendJson(res, 200, { allowlist: await readAllowlist(dataPath) });

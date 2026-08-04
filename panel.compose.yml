@@ -14,6 +14,11 @@ services:
       PANEL_PORT: "8787"
       PANEL_DATA_DIR: "/data"
       PANEL_HOST_DATA_DIR: "${PANEL_HOST_DATA_DIR:?Run start-panel-docker.ps1 first or create a .env file.}"
+      PANEL_HOST_ROOT_DIR: "${PANEL_HOST_ROOT_DIR:?Run start-panel-docker.ps1 first or create a .env file.}"
+      PANEL_PATH_MAPPINGS: "/data=${PANEL_HOST_DATA_DIR};/host-data=${PANEL_EXTRA_HOST_DATA_DIR};/hostfs=${PANEL_HOST_ROOT_DIR}"
     volumes:
       - ./:/data
+      - ./public:/app/public
+      - "${PANEL_EXTRA_HOST_DATA_DIR:?Run start-panel-docker.ps1 first or create a .env file.}:/host-data"
+      - "${PANEL_HOST_ROOT_DIR:?Run start-panel-docker.ps1 first or create a .env file.}:/hostfs"
       - /var/run/docker.sock:/var/run/docker.sock

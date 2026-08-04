@@ -4,13 +4,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Minecraft 控制面板</title>
-  <link rel="stylesheet" href="./styles.css?v=4">
+  <link rel="stylesheet" href="./styles.css?v=8">
 </head>
 <body>
+  <!-- ============ 登录 / 认证 ============ -->
   <div class="auth-gate" id="authGate">
     <main class="auth-box" aria-live="polite">
       <div class="auth-brand">
-        <div class="mark">MC</div>
+        <div class="mark">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <defs>
+              <linearGradient id="grassG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#79b543"/>
+                <stop offset="1" stop-color="#3f6b24"/>
+              </linearGradient>
+            </defs>
+            <rect x="4" y="4" width="56" height="56" rx="12" fill="#ffffff" opacity="0.1"/>
+            <rect x="6" y="6" width="52" height="52" rx="11" fill="url(#grassG)"/>
+            <path d="M6 22c0-8.3 6.7-15 15-15h22c8.3 0 15 6.7 15 15v7H6v-7z" fill="#6b5236"/>
+            <path d="M6 22c0-8.3 6.7-15 15-15h2.5c-1 5.2 1.2 9.3 4.5 11.4 2.6-1.4 5.7-2.1 9-2.1 3.1 0 6.1.7 8.6 2 3.4-2.1 5.6-6.2 4.6-11.3h2.8c8.3 0 15 6.7 15 15v7H6v-7z" fill="#8fbf5a"/>
+            <rect x="12" y="20" width="3" height="5" rx="1" fill="#8fbf5a"/>
+            <rect x="27" y="18" width="3" height="5" rx="1" fill="#8fbf5a"/>
+            <rect x="49" y="20" width="3" height="5" rx="1" fill="#8fbf5a"/>
+          </svg>
+        </div>
         <div>
           <h1>Minecraft 控制面板</h1>
           <p id="authSubtitle">正在检查管理员账户...</p>
@@ -37,85 +54,66 @@
     </main>
   </div>
 
+  <!-- ============ 主界面 ============ -->
   <div class="shell" id="appShell" hidden>
-    <aside class="sidebar">
+
+    <!-- 顶部 HUD 条 -->
+    <header class="hudbar">
       <div class="brand">
-        <div class="mark">MC</div>
+        <div class="mark">
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <use href="#grassG"></use>
+          </svg>
+        </div>
         <div>
           <h1>服务器面板</h1>
           <p>Docker Bedrock</p>
         </div>
       </div>
-      <button class="primary wide" id="refreshBtn">刷新状态</button>
-      <div id="serverList" class="server-list"></div>
-    </aside>
 
-    <main class="main">
-      <header class="topbar">
-        <div>
-          <h2 id="activeTitle">正在读取服务器</h2>
+      <!-- 服务器横向切换 -->
+      <div id="serverList" class="server-strip"></div>
+
+      <div class="hud-actions">
+        <button id="refreshBtn" class="ghost" title="刷新状态">刷新</button>
+        <button id="logsBtn" class="ghost" title="面板日志">日志</button>
+        <button id="accountBtn" class="ghost" title="管理员账户">账户</button>
+      </div>
+    </header>
+
+    <!-- 主舞台 -->
+    <main class="stage">
+
+      <!-- HUD 大状态区 -->
+      <section class="hero">
+        <div class="hero-info">
+          <div class="hero-titleline">
+            <span class="status-orb" id="heroOrb"></span>
+            <h2 id="activeTitle">正在读取服务器</h2>
+          </div>
           <p id="activeSub">连接 Docker compose...</p>
         </div>
-        <div class="top-actions">
-          <button id="showDeployBtn">新建部署</button>
-          <button id="openDetailsBtn">服务器详情</button>
+        <div class="hero-actions">
+          <button id="showDeployBtn" class="primary">＋ 新建部署</button>
+          <button id="openDetailsBtn">详情</button>
           <button id="openConsoleBtn">控制台</button>
-          <button id="logsBtn">面板日志</button>
-          <button id="accountBtn">管理员账户</button>
         </div>
-      </header>
+      </section>
 
-      <section class="status-row dashboard-only" id="statusRow"></section>
+      <!-- HUD 统计 -->
+      <section class="hud-stats" id="statusRow"></section>
 
-      <section class="layout">
-        <div class="panel deploy-panel dashboard-only" id="deployPanel">
-          <div class="panel-head">
-            <h3>一键部署</h3>
-            <button class="ghost" id="hideDeployBtn">收起</button>
-          </div>
-          <form id="deployForm" class="form-grid">
-            <label>服务名<input name="serviceName" placeholder="bedrock-new-19138"></label>
-            <label>显示名<input name="displayName" value="My Bedrock Server"></label>
-            <label>IPv4 端口<input name="port" type="number" value="19138" min="1" max="65535" required></label>
-            <label>IPv6 端口<input name="portV6" type="number" value="19139" min="1" max="65535"></label>
-            <label>版本
-              <select name="version" id="versionSelect">
-                <option value="LATEST">最新版</option>
-                <option value="1.26.33.2">1.26.33.2</option>
-                <option value="1.26.33.1">1.26.33.1</option>
-                <option value="1.26.31.1">1.26.31.1</option>
-                <option value="1.21.130">1.21.130</option>
-                <option value="1.21.120">1.21.120</option>
-                <option value="1.21.110">1.21.110</option>
-                <option value="1.21.100">1.21.100</option>
-              </select>
-            </label>
-            <label>世界名<input name="levelName" value="Bedrock level"></label>
-            <label>种子<input name="levelSeed"></label>
-            <label>最大玩家<input name="maxPlayers" type="number" value="10" min="1" step="1"></label>
-            <label>游戏模式<select name="gamemode"><option>survival</option><option>creative</option><option>adventure</option></select></label>
-            <label>难度<select name="difficulty"><option>normal</option><option>peaceful</option><option>easy</option><option>hard</option></select></label>
-            <label>视距<input name="viewDistance" type="number" value="32" min="5" max="96" step="1"></label>
-            <label>Tick 距离<input name="tickDistance" type="number" value="4" min="4" max="12" step="1"></label>
-            <label class="check"><input name="onlineMode" type="checkbox" checked> 在线验证</label>
-            <label class="check"><input name="allowCheats" type="checkbox"> 允许作弊</label>
-            <label class="check"><input name="allowList" type="checkbox"> 白名单</label>
-            <label class="check"><input name="forceGamemode" type="checkbox"> 强制模式</label>
-            <label class="check"><input name="texturepackRequired" type="checkbox"> 强制材质包</label>
-            <label class="check"><input name="enableLanVisibility" type="checkbox" checked> LAN 可见</label>
-            <label class="check danger-check"><input name="forceOverwriteDataDir" type="checkbox"> 强制覆盖数据目录</label>
-            <button class="primary submit" type="submit">部署并启动</button>
-          </form>
-        </div>
+      <!-- 主面板 —— 三块核心 -->
+      <section class="grid">
 
-        <div class="panel dashboard-only">
+        <!-- 运行控制 -->
+        <div class="panel">
           <div class="panel-head">
             <h3>运行控制</h3>
             <span id="serverPath"></span>
           </div>
           <div class="action-grid">
-            <button data-action="up">创建/启动</button>
-            <button data-action="start">启动</button>
+            <button data-action="up">启动</button>
             <button data-action="stop">停止</button>
             <button data-action="restart">重启</button>
             <button data-action="pause">暂停</button>
@@ -123,7 +121,20 @@
           </div>
         </div>
 
-        <div class="panel dashboard-only resource-panel">
+        <!-- 在线玩家(收敛进大卡,此处只留触发) -->
+        <div class="panel">
+          <div class="panel-head">
+            <h3>在线玩家</h3>
+            <div class="log-actions">
+              <span id="onlinePlayersStatus">等待刷新</span>
+              <button id="refreshPlayersBtn">刷新</button>
+            </div>
+          </div>
+          <div id="onlinePlayersBox" class="chips"></div>
+        </div>
+
+        <!-- 资源占用(收敛为紧凑条) -->
+        <div class="panel resource-panel">
           <div class="panel-head">
             <h3>资源占用</h3>
             <div class="log-actions">
@@ -141,246 +152,302 @@
           </div>
         </div>
 
-        <div class="panel config-panel dashboard-only">
+        <!-- 关键配置 -->
+        <div class="panel config-panel">
           <div class="panel-head">
             <h3>关键配置</h3>
             <button class="primary" id="savePropsBtn">保存配置</button>
           </div>
           <form id="propsForm" class="form-grid compact"></form>
         </div>
-
-        <div class="panel details-panel" id="detailsPanel">
-          <div class="panel-head">
-            <h3>服务器详情</h3>
-            <button id="closeDetailsBtn">返回一级面板</button>
-          </div>
-          <div class="tabs">
-            <button class="selected" data-tab="worlds">世界</button>
-            <button data-tab="allowlist">白名单</button>
-            <button data-tab="packs">模组/资源包</button>
-            <button data-tab="restart">定时重启</button>
-            <button data-tab="frp">内网穿透</button>
-            <button data-tab="files">文件</button>
-            <button data-tab="danger">删除</button>
-          </div>
-
-          <div class="tab-page active" id="tab-worlds">
-            <div class="world-tools">
-              <label>当前世界<select id="worldSelect"></select></label>
-              <button id="refreshWorldsBtn">刷新</button>
-              <button class="danger" id="deleteWorldBtn">备份并删除</button>
-            </div>
-            <div class="form-grid compact">
-              <label>新世界名<input id="newWorldName" placeholder="new-world"></label>
-              <label>新世界种子<input id="newWorldSeed"></label>
-              <button id="newWorldBtn">设为新世界</button>
-            </div>
-
-            <div class="backup-grid">
-              <section class="subpanel">
-                <h4>手动备份</h4>
-                <div class="upload-line">
-                  <button id="backupWorldBtn">立即备份当前世界</button>
-                </div>
-              </section>
-
-              <section class="subpanel">
-                <h4>自动备份</h4>
-                <div class="form-grid compact">
-                  <label>备份目录<input id="backupDirInput" placeholder="backups"></label>
-                  <label>间隔分钟<input id="backupIntervalInput" type="number" min="1" max="1440"></label>
-                  <label>最大文件数<input id="backupMaxFilesInput" type="number" min="1" max="500"></label>
-                  <label class="check"><input id="autoBackupEnabledInput" type="checkbox"> 启用自动备份</label>
-                  <button id="saveBackupSettingsBtn">保存自动备份</button>
-                </div>
-              </section>
-            </div>
-
-            <section class="subpanel">
-              <div class="panel-head flat">
-                <h4>最近备份</h4>
-                <button id="refreshBackupsBtn">刷新备份</button>
-              </div>
-              <div id="backupList" class="backup-list"></div>
-            </section>
-
-            <section class="subpanel">
-              <h4>手动选择还原</h4>
-              <div class="upload-line">
-                <input id="worldFile" type="file" accept=".zip,.mcworld">
-                <input id="replaceWorldName" placeholder="还原为世界名">
-                <button id="replaceWorldBtn">上传并还原</button>
-              </div>
-            </section>
-          </div>
-
-          <div class="tab-page" id="tab-allowlist">
-            <div class="form-grid compact">
-              <label>玩家名<input id="allowlistNameInput" placeholder="Steve"></label>
-              <label>XUID 可选<input id="allowlistXuidInput" placeholder="可留空"></label>
-              <label class="check"><input id="allowlistIgnoreLimitInput" type="checkbox"> 忽略人数上限</label>
-              <button id="addAllowlistBtn">添加/更新</button>
-            </div>
-            <div id="allowlistBox" class="backup-list"></div>
-          </div>
-
-          <div class="tab-page" id="tab-packs">
-            <div class="upload-line">
-              <input id="modFile" type="file" accept=".zip,.mcpack,.mcaddon">
-              <button id="installModBtn">安装包</button>
-            </div>
-            <div class="pack-columns">
-              <div><h4>Behavior Packs</h4><div id="behaviorPacks" class="chips"></div></div>
-              <div><h4>Resource Packs</h4><div id="resourcePacks" class="chips"></div></div>
-            </div>
-          </div>
-
-          <div class="tab-page" id="tab-restart">
-            <section class="subpanel restart-settings">
-              <div class="panel-head flat">
-                <div>
-                  <h4>定时重启服务器</h4>
-                  <p class="muted-copy">只重启计划执行时正在运行的服务器，停机或暂停状态会自动跳过。</p>
-                </div>
-                <span id="restartTimezone">当前时区</span>
-              </div>
-              <div class="form-grid compact">
-                <label class="check"><input id="restartEnabledInput" type="checkbox"> 启用定时重启</label>
-                <label>执行方式
-                  <select id="restartModeInput">
-                    <option value="interval">按间隔循环</option>
-                    <option value="daily">每天固定时间</option>
-                  </select>
-                </label>
-                <label id="restartIntervalField">间隔小时<input id="restartIntervalInput" type="number" min="1" max="168" step="1" value="12"></label>
-                <label id="restartDailyField" hidden>每天时间<input id="restartDailyInput" type="time" value="04:00"></label>
-                <button class="primary" id="saveRestartSettingsBtn">保存重启计划</button>
-              </div>
-            </section>
-            <section class="schedule-status">
-              <div><span>当前计划</span><strong id="restartPlanStatus">未启用</strong></div>
-              <div><span>下次执行</span><strong id="restartNextRun">-</strong></div>
-              <div><span>上次执行</span><strong id="restartLastRun">尚未执行</strong></div>
-              <div><span>执行结果</span><strong id="restartLastResult">-</strong></div>
-            </section>
-          </div>
-
-          <div class="tab-page" id="tab-frp">
-            <section class="subpanel frp-settings">
-              <div class="panel-head flat">
-                <div>
-                  <h4>FRP 内网穿透</h4>
-                  <p class="muted-copy">将这台 Bedrock 服务器的 UDP 端口转发到你的公网 frps。VPS 防火墙需放行公网 UDP 端口。</p>
-                </div>
-                <span id="frpImageLabel">frpc</span>
-              </div>
-              <form id="frpForm" class="form-grid compact">
-                <label class="check"><input id="frpEnabledInput" type="checkbox"> 启用 FRP 穿透</label>
-                <label>frps 地址<input id="frpServerAddrInput" placeholder="frp.example.com" autocomplete="off"></label>
-                <label>控制端口<input id="frpServerPortInput" type="number" min="1" max="65535" step="1" value="7000"></label>
-                <label>公网 UDP 端口<input id="frpRemotePortInput" type="number" min="1" max="65535" step="1"></label>
-                <label>认证令牌<input id="frpTokenInput" type="password" maxlength="512" autocomplete="new-password" placeholder="已配置时留空表示不修改"></label>
-                <label class="check"><input id="frpTlsInput" type="checkbox" checked> 启用 TLS</label>
-                <button class="primary" type="submit">保存并应用</button>
-              </form>
-            </section>
-            <section class="schedule-status frp-status-grid">
-              <div><span>代理状态</span><strong id="frpStatus">未配置</strong></div>
-              <div><span>公网入口</span><strong id="frpEndpoint">-</strong></div>
-              <div><span>令牌</span><strong id="frpTokenStatus">未配置</strong></div>
-              <div><span>更新时间</span><strong id="frpUpdatedAt">-</strong></div>
-            </section>
-            <section class="subpanel">
-              <div class="panel-head flat">
-                <h4>frpc 控制与日志</h4>
-                <div class="log-actions">
-                  <button data-frp-action="start">启动</button>
-                  <button data-frp-action="stop">停止</button>
-                  <button data-frp-action="restart">重启</button>
-                  <button id="refreshFrpBtn">刷新</button>
-                </div>
-              </div>
-              <pre id="frpLogsBox" class="service-log">尚未启用 FRP。</pre>
-            </section>
-          </div>
-
-          <div class="tab-page" id="tab-files">
-            <div class="panel-head flat">
-              <div class="filebar">
-                <button id="fileUpBtn">上级</button>
-                <span id="filePath">/</span>
-              </div>
-              <button class="primary" id="saveFileBtn">保存文件</button>
-            </div>
-            <div class="file-editor">
-              <div id="fileList" class="file-list"></div>
-              <textarea id="fileText" spellcheck="false" placeholder="选择左侧文件"></textarea>
-            </div>
-          </div>
-
-          <div class="tab-page" id="tab-danger">
-            <div class="danger-zone">
-              <h4>删除服务器</h4>
-              <p>会停止并移除容器，然后从面板 compose 中删除该服务。默认保留数据目录。</p>
-              <label>输入服务器名确认<input id="deleteServerName" placeholder="完整服务器名"></label>
-              <label class="check danger-check"><input id="deleteServerData" type="checkbox"> 同时删除数据目录</label>
-              <button class="danger" id="deleteServerBtn">删除服务器</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel console-panel" id="consolePanel">
-          <div class="panel-head">
-            <h3>控制台</h3>
-            <button id="closeConsoleBtn">返回一级面板</button>
-          </div>
-          <section class="console-log">
-            <div class="panel-head flat">
-              <h3>实时服务器日志</h3>
-              <div class="log-actions">
-                <span id="liveLogStatus">自动刷新</span>
-                <button id="refreshLiveLogsBtn">刷新</button>
-              </div>
-            </div>
-            <pre id="liveLogsBox"></pre>
-          </section>
-          <section class="command-section">
-            <div class="panel-head flat">
-              <h3>游戏指令</h3>
-            </div>
-            <div class="command-hints">
-              <button data-command-template="list">在线玩家</button>
-              <button data-command-template="say 服务器公告">公告</button>
-              <button data-command-template="time set day">白天</button>
-              <button data-command-template="weather clear">晴天</button>
-              <button data-command-template="difficulty normal">普通难度</button>
-              <button data-command-template="gamemode creative 玩家名">创造模式</button>
-              <button data-command-template="tp 玩家名 0 80 0">传送</button>
-              <button data-command-template="give 玩家名 diamond 1">给予物品</button>
-            </div>
-            <form id="commandForm" class="command-line">
-              <input id="commandInput" placeholder="输入指令，不需要前面的 /">
-              <button class="primary" type="submit">发送指令</button>
-            </form>
-            <pre id="commandOutput" class="mini-output"></pre>
-          </section>
-        </div>
-
-        <div class="panel logs-panel dashboard-only" id="logsPanel">
-          <div class="panel-head">
-            <h3>日志</h3>
-            <div class="log-actions">
-              <button data-log-mode="server" class="selected">服务器日志</button>
-              <button data-log-mode="panel">面板日志</button>
-              <button id="refreshLogsBtn">刷新日志</button>
-              <button id="closeLogsBtn">关闭</button>
-            </div>
-          </div>
-          <pre id="logsBox"></pre>
-        </div>
       </section>
     </main>
+
+    <!-- ============ 全屏聚焦层：新建部署 ============ -->
+    <div class="focus-layer" id="deployPanel">
+      <div class="focus-head">
+        <h3>一键部署</h3>
+        <button class="ghost" id="hideDeployBtn">收起</button>
+      </div>
+      <form id="deployForm" class="form-grid">
+        <label>服务名<input name="serviceName" placeholder="bedrock-new-19138"></label>
+        <label>服务器文件目录<input name="dataDir" placeholder="servers/bedrock-new-19138 或 E:\MC\server-a"></label>
+        <label>显示名<input name="displayName" value="My Bedrock Server"></label>
+        <label>IPv4 端口<input name="port" type="number" value="19138" min="1" max="65535" required></label>
+        <label>IPv6 端口<input name="portV6" type="number" value="19139" min="1" max="65535"></label>
+        <label>版本
+          <select name="version" id="versionSelect">
+            <option value="LATEST">最新版</option>
+            <option value="1.26.33.2">1.26.33.2</option>
+            <option value="1.26.33.1">1.26.33.1</option>
+            <option value="1.26.31.1">1.26.31.1</option>
+            <option value="1.21.130">1.21.130</option>
+            <option value="1.21.120">1.21.120</option>
+            <option value="1.21.110">1.21.110</option>
+            <option value="1.21.100">1.21.100</option>
+          </select>
+        </label>
+        <label>世界名<input name="levelName" value="Bedrock level"></label>
+        <label>种子<input name="levelSeed"></label>
+        <label>最大玩家<input name="maxPlayers" type="number" value="10" min="1" step="1"></label>
+        <label>游戏模式<select name="gamemode"><option>survival</option><option>creative</option><option>adventure</option></select></label>
+        <label>难度<select name="difficulty"><option>normal</option><option>peaceful</option><option>easy</option><option>hard</option></select></label>
+        <label>视距<input name="viewDistance" type="number" value="32" min="5" max="96" step="1"></label>
+        <label>Tick 距离<input name="tickDistance" type="number" value="4" min="4" max="12" step="1"></label>
+        <label class="check"><input name="onlineMode" type="checkbox" checked> 在线验证</label>
+        <label class="check"><input name="allowCheats" type="checkbox"> 允许作弊</label>
+        <label class="check"><input name="allowList" type="checkbox"> 白名单</label>
+        <label class="check"><input name="forceGamemode" type="checkbox"> 强制模式</label>
+        <label class="check"><input name="texturepackRequired" type="checkbox"> 强制材质包</label>
+        <label class="check"><input name="enableLanVisibility" type="checkbox" checked> LAN 可见</label>
+        <label class="check danger-check"><input name="forceOverwriteDataDir" type="checkbox"> 强制覆盖数据目录</label>
+        <button class="primary submit" type="submit">部署并启动</button>
+      </form>
+    </div>
+
+    <!-- ============ 全屏聚焦层：服务器详情 ============ -->
+    <div class="focus-layer" id="detailsPanel">
+      <div class="focus-head">
+        <h3>服务器详情</h3>
+        <button id="closeDetailsBtn">返回</button>
+      </div>
+      <!-- 二级导航：左侧功能列表 + 右侧内容 -->
+      <div class="detail-layout">
+        <nav class="detail-nav">
+          <button class="selected" data-tab="worlds">世界与备份</button>
+          <button data-tab="allowlist">白名单</button>
+          <button data-tab="packs">模组与资源包</button>
+          <button data-tab="restart">定时重启</button>
+          <button data-tab="frp">内网穿透</button>
+          <button data-tab="files">文件管理</button>
+          <button data-tab="danger" class="nav-danger">删除服务器</button>
+        </nav>
+        <div class="detail-content">
+
+      <div class="tab-page active" id="tab-worlds">
+        <div class="world-tools">
+          <label>当前世界<select id="worldSelect"></select></label>
+          <button id="refreshWorldsBtn">刷新</button>
+          <button class="danger" id="deleteWorldBtn">备份并删除</button>
+        </div>
+        <div class="form-grid compact">
+          <label>新世界名<input id="newWorldName" placeholder="new-world"></label>
+          <label>新世界种子<input id="newWorldSeed"></label>
+          <button id="newWorldBtn">设为新世界</button>
+        </div>
+
+        <div class="backup-grid">
+          <section class="subpanel">
+            <h4>手动备份</h4>
+            <div class="upload-line">
+              <button id="backupWorldBtn">立即备份当前世界</button>
+            </div>
+          </section>
+
+          <section class="subpanel">
+            <h4>自动备份</h4>
+            <div class="form-grid compact">
+              <label>备份目录<input id="backupDirInput" placeholder="backups 或 F:\MinecraftBackups\server-a"></label>
+              <label>间隔分钟<input id="backupIntervalInput" type="number" min="1" max="1440"></label>
+              <label>最大文件数<input id="backupMaxFilesInput" type="number" min="1" max="500"></label>
+              <label class="check"><input id="autoBackupEnabledInput" type="checkbox"> 启用自动备份</label>
+              <label class="check"><input id="consistentBackupInput" type="checkbox"> 备份前优雅停机</label>
+              <button id="saveBackupSettingsBtn">保存自动备份</button>
+            </div>
+            <p class="muted-copy">开启后备份会先优雅停服保存存档再压缩，确保备份一致，备份完自动重启。</p>
+          </section>
+        </div>
+
+        <section class="subpanel">
+          <div class="panel-head flat">
+            <h4>最近备份</h4>
+            <button id="refreshBackupsBtn">刷新备份</button>
+          </div>
+          <div id="backupList" class="backup-list"></div>
+        </section>
+
+        <section class="subpanel">
+          <h4>手动选择还原</h4>
+          <div class="upload-line">
+            <input id="worldFile" type="file" accept=".zip,.mcworld">
+            <input id="replaceWorldName" placeholder="还原为世界名">
+            <button id="replaceWorldBtn">上传并还原</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="tab-page" id="tab-allowlist">
+        <div class="form-grid compact">
+          <label>玩家名<input id="allowlistNameInput" placeholder="Steve"></label>
+          <label>XUID 可选<input id="allowlistXuidInput" placeholder="可留空"></label>
+          <label class="check"><input id="allowlistIgnoreLimitInput" type="checkbox"> 忽略人数上限</label>
+          <button id="addAllowlistBtn">添加/更新</button>
+        </div>
+        <div id="allowlistBox" class="backup-list"></div>
+      </div>
+
+      <div class="tab-page" id="tab-packs">
+        <div class="upload-line">
+          <input id="modFile" type="file" accept=".zip,.mcpack,.mcaddon">
+          <button id="installModBtn">安装包</button>
+        </div>
+        <div class="pack-columns">
+          <div><h4>Behavior Packs</h4><div id="behaviorPacks" class="chips"></div></div>
+          <div><h4>Resource Packs</h4><div id="resourcePacks" class="chips"></div></div>
+        </div>
+      </div>
+
+      <div class="tab-page" id="tab-restart">
+        <section class="subpanel restart-settings">
+          <div class="panel-head flat">
+            <div>
+              <h4>定时重启服务器</h4>
+              <p class="muted-copy">只重启计划执行时正在运行的服务器，停机或暂停状态会自动跳过。</p>
+            </div>
+            <span id="restartTimezone">当前时区</span>
+          </div>
+          <div class="form-grid compact">
+            <label class="check"><input id="restartEnabledInput" type="checkbox"> 启用定时重启</label>
+            <label>执行方式
+              <select id="restartModeInput">
+                <option value="interval">按间隔循环</option>
+                <option value="daily">每天固定时间</option>
+              </select>
+            </label>
+            <label id="restartIntervalField">间隔小时<input id="restartIntervalInput" type="number" min="1" max="168" step="1" value="12"></label>
+            <label id="restartDailyField" hidden>每天时间<input id="restartDailyInput" type="time" value="04:00"></label>
+            <button class="primary" id="saveRestartSettingsBtn">保存重启计划</button>
+          </div>
+        </section>
+        <section class="schedule-status">
+          <div><span>当前计划</span><strong id="restartPlanStatus">未启用</strong></div>
+          <div><span>下次执行</span><strong id="restartNextRun">-</strong></div>
+          <div><span>上次执行</span><strong id="restartLastRun">尚未执行</strong></div>
+          <div><span>执行结果</span><strong id="restartLastResult">-</strong></div>
+        </section>
+      </div>
+
+      <div class="tab-page" id="tab-frp">
+        <section class="subpanel frp-settings">
+          <div class="panel-head flat">
+            <div>
+              <h4>FRP 内网穿透</h4>
+              <p class="muted-copy">将这台 Bedrock 服务器的 UDP 端口转发到你的公网 frps。VPS 防火墙需放行公网 UDP 端口。</p>
+            </div>
+            <span id="frpImageLabel">frpc</span>
+          </div>
+          <form id="frpForm" class="form-grid compact">
+            <label class="check"><input id="frpEnabledInput" type="checkbox"> 启用 FRP 穿透</label>
+            <label>frps 地址<input id="frpServerAddrInput" placeholder="frp.example.com" autocomplete="off"></label>
+            <label>控制端口<input id="frpServerPortInput" type="number" min="1" max="65535" step="1" value="7000"></label>
+            <label>公网 UDP 端口<input id="frpRemotePortInput" type="number" min="1" max="65535" step="1"></label>
+            <label>认证令牌<input id="frpTokenInput" type="password" maxlength="512" autocomplete="new-password" placeholder="已配置时留空表示不修改"></label>
+            <label class="check"><input id="frpTlsInput" type="checkbox" checked> 启用 TLS</label>
+            <button class="primary" type="submit">保存并应用</button>
+          </form>
+        </section>
+        <section class="schedule-status frp-status-grid">
+          <div><span>代理状态</span><strong id="frpStatus">未配置</strong></div>
+          <div><span>公网入口</span><strong id="frpEndpoint">-</strong></div>
+          <div><span>令牌</span><strong id="frpTokenStatus">未配置</strong></div>
+          <div><span>更新时间</span><strong id="frpUpdatedAt">-</strong></div>
+        </section>
+        <section class="subpanel">
+          <div class="panel-head flat">
+            <h4>frpc 控制与日志</h4>
+            <div class="log-actions">
+              <button data-frp-action="start">启动</button>
+              <button data-frp-action="stop">停止</button>
+              <button data-frp-action="restart">重启</button>
+              <button id="refreshFrpBtn">刷新</button>
+            </div>
+          </div>
+          <pre id="frpLogsBox" class="service-log">尚未启用 FRP。</pre>
+        </section>
+      </div>
+
+      <div class="tab-page" id="tab-files">
+        <div class="panel-head flat">
+          <div class="filebar">
+            <button id="fileUpBtn">上级</button>
+            <span id="filePath">/</span>
+          </div>
+          <button class="primary" id="saveFileBtn">保存文件</button>
+        </div>
+        <div class="file-editor">
+          <div id="fileList" class="file-list"></div>
+          <textarea id="fileText" spellcheck="false" placeholder="选择左侧文件"></textarea>
+        </div>
+      </div>
+
+      <div class="tab-page" id="tab-danger">
+        <div class="danger-zone">
+          <h4>删除服务器</h4>
+          <p>会停止并移除容器，然后从面板 compose 中删除该服务。默认保留数据目录。</p>
+          <label>输入服务器名确认<input id="deleteServerName" placeholder="完整服务器名"></label>
+          <label class="check danger-check"><input id="deleteServerData" type="checkbox"> 同时删除数据目录</label>
+          <label>自定义目录删除确认<input id="deleteServerDataPath" placeholder="仅删除自定义数据目录时填写完整路径"></label>
+          <button class="danger" id="deleteServerBtn">删除服务器</button>
+        </div>
+      </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 全屏聚焦层：控制台 ============ -->
+    <div class="focus-layer" id="consolePanel">
+      <div class="focus-head">
+        <h3>控制台</h3>
+        <button id="closeConsoleBtn">返回</button>
+      </div>
+      <section class="console-log">
+        <div class="panel-head flat">
+          <h3>实时服务器日志</h3>
+          <div class="log-actions">
+            <span id="liveLogStatus">自动刷新</span>
+            <button id="refreshLiveLogsBtn">刷新</button>
+          </div>
+        </div>
+        <pre id="liveLogsBox"></pre>
+      </section>
+      <section class="command-section">
+        <div class="panel-head flat">
+          <h3>游戏指令</h3>
+        </div>
+        <div class="command-hints">
+          <button data-command-template="list">在线玩家</button>
+          <button data-command-template="say 服务器公告">公告</button>
+          <button data-command-template="time set day">白天</button>
+          <button data-command-template="weather clear">晴天</button>
+          <button data-command-template="difficulty normal">普通难度</button>
+          <button data-command-template="gamemode creative 玩家名">创造模式</button>
+          <button data-command-template="tp 玩家名 0 80 0">传送</button>
+          <button data-command-template="give 玩家名 diamond 1">给予物品</button>
+        </div>
+        <form id="commandForm" class="command-line">
+          <input id="commandInput" placeholder="输入指令，不需要前面的 /">
+          <button class="primary" type="submit">发送指令</button>
+        </form>
+        <pre id="commandOutput" class="mini-output"></pre>
+      </section>
+    </div>
+
+    <!-- ============ 全屏聚焦层：日志 ============ -->
+    <div class="focus-layer" id="logsPanel">
+      <div class="focus-head">
+        <h3>日志</h3>
+        <div class="log-actions">
+          <button data-log-mode="server" class="selected">服务器日志</button>
+          <button data-log-mode="panel">面板日志</button>
+          <button id="refreshLogsBtn">刷新日志</button>
+          <button id="closeLogsBtn">关闭</button>
+        </div>
+      </div>
+      <pre id="logsBox"></pre>
+    </div>
   </div>
+
+  <!-- ============ 账户对话框 ============ -->
   <dialog id="accountDialog" class="account-dialog">
     <form id="accountForm" class="auth-form">
       <div class="panel-head flat">
@@ -401,6 +468,6 @@
     </form>
   </dialog>
   <div id="toast"></div>
-  <script src="./app.js?v=4"></script>
+  <script src="./app.js?v=8"></script>
 </body>
 </html>

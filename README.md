@@ -1,6 +1,6 @@
 # Minecraft Control Panel
 
-一个独立的 Minecraft Bedrock 服务器 Docker 管理面板。它只管理本项目目录下创建的服务器，不会读取或接管你原来的服务器目录。
+一个独立的 Minecraft Bedrock 服务器 Docker 管理面板。默认只管理本项目目录下创建的服务器，不会读取或接管你原来的服务器目录；新建服务器时也可以显式填写自定义数据目录。
 
 默认访问地址：
 
@@ -15,6 +15,7 @@ http://127.0.0.1:8787
 - 会话采用 `HttpOnly` Cookie，支持空闲超时、最长有效期和登录失败限速
 - 一键部署新的 Minecraft Bedrock Docker 服务器
 - 新建服务器时通过下拉列表选择版本
+- 新建服务器时可自定义服务器文件目录
 - 部署前可视化配置端口和 `server.properties` 关键参数
 - 关键数值范围校验：端口 `1-65535`、视距 `5-96`（面板性能安全上限）、Tick 距离 `4-12`
 - 支持强制覆盖已存在的数据目录，需要明确确认
@@ -29,6 +30,7 @@ http://127.0.0.1:8787
   - 控制台：实时日志和游戏指令
 - 控制台支持实时 Docker logs 和游戏指令输入
 - 指令输入提供常用命令提示
+- 在线玩家：主面板实时显示当前在线玩家（解析服务器日志中的连接/断开事件，约 15 秒刷新一次）
 - 世界管理：新建世界、删除世界、替换世界
 - 备份管理：
   - 手动备份
@@ -38,6 +40,7 @@ http://127.0.0.1:8787
   - 自动备份支持设置备份间隔和最大保留数量
   - 最近备份列表可快捷还原
   - 支持手动选择旧备份进行还原
+  - 备份一致性：备份前可优雅停服保存存档再压缩（默认开启，可关闭），确保备份文件完整一致，备份完成后自动重启服务器
 - 白名单列表管理
 - 模组/资源包管理，不显示默认资源包
 - 文件浏览和小文件在线编辑
@@ -61,6 +64,56 @@ mc-control-panel/.panel-auth.json
 
 `compose.example.yml` 是一个安全的示例模板。实际运行时由面板生成 `compose.yml`，不要手动提交。
 
+面板容器会把宿主项目的 `public/` 目录额外挂载到容器内的 `/app/public`（见 `panel.compose.yml`），这样修改前端文件后无需重建镜像即可生效，浏览器强刷（`Ctrl+Shift+R`）即可看到新界面。
+
+### 自定义目录
+
+新建服务器时，“服务器文件目录”可以留空，留空时默认使用：
+
+```text
+servers/<服务名>
+```
+
+也可以填写面板可访问的目录：
+
+```text
+servers/my-bedrock
+/data/custom-servers/my-bedrock
+/host-data/mc-servers/my-bedrock
+E:\MC\server-a
+/hostfs/e/MC/server-a
+```
+
+在 Docker 部署模式下：
+
+- `/data` 对应本项目目录 `mc-control-panel/`
+- `/host-data` 对应项目上一级目录，当前脚本默认是 `E:\Games\Server`
+- `/hostfs` 对应 Docker Desktop 的宿主机磁盘根目录，例如 `/hostfs/e/...` 对应 `E:\...`，`/hostfs/f/...` 对应 `F:\...`
+- Windows 路径也可以直接填写，例如 `F:\MinecraftBackups\server-a`，面板会自动转换
+
+服务器文件目录和备份目录是按服务器分别保存的。你可以让服务器 A 运行在 E 盘、备份到 F 盘，服务器 B 运行在 G 盘、备份到 H 盘。
+
+例如新建服务器时填写：
+
+```text
+服务器文件目录：E:\MC\server-a
+```
+
+然后进入这台服务器的 `服务器详情 -> 世界 -> 自动备份`，把备份目录填写为：
+
+```text
+F:\MinecraftBackups\server-a
+```
+
+面板会继续把自动备份和手动备份分开放到 `auto`、`manual` 子目录，实际目录类似：
+
+```text
+F:\MinecraftBackups\server-a\auto
+F:\MinecraftBackups\server-a\manual
+```
+
+删除服务器时默认保留数据目录。如果勾选“同时删除数据目录”，默认 `servers/` 下的数据目录会直接按服务器名确认删除；自定义数据目录还需要额外输入完整目录路径确认。
+
 ## Docker 部署面板
 
 在项目目录运行一条命令即可自动生成 Docker 配置并启动面板：
@@ -77,6 +130,8 @@ powershell -ExecutionPolicy Bypass -File .\start-panel-docker.ps1
 
 ```env
 PANEL_HOST_DATA_DIR=/run/desktop/mnt/host/e/Games/Server/mc-control-panel
+PANEL_EXTRA_HOST_DATA_DIR=/run/desktop/mnt/host/e/Games/Server
+PANEL_HOST_ROOT_DIR=/run/desktop/mnt/host
 ```
 
 ```powershell
@@ -113,6 +168,9 @@ powershell -ExecutionPolicy Bypass -File .\start-panel.ps1
 | `PANEL_PORT` | `8787` | 面板监听端口 |
 | `PANEL_DATA_DIR` | `/data` | 容器内数据目录 |
 | `PANEL_HOST_DATA_DIR` | 由 `.env` 提供 | Docker Desktop 中映射到宿主机项目目录的路径 |
+| `PANEL_EXTRA_HOST_DATA_DIR` | 由 `.env` 提供 | 映射到容器 `/host-data` 的宿主机目录 |
+| `PANEL_HOST_ROOT_DIR` | 由 `.env` 提供 | 映射到容器 `/hostfs` 的宿主机磁盘根目录 |
+| `PANEL_PATH_MAPPINGS` | `/data=...;/host-data=...;/hostfs=...` | 面板把容器路径转换为 Minecraft 容器宿主机挂载路径时使用 |
 | `PANEL_SECURE_COOKIE` | `false` | HTTPS 反向代理部署时设为 `true`，强制会话 Cookie 仅通过 HTTPS 发送 |
 
 如果你把项目移动到其他磁盘或目录，重新运行 `start-panel-docker.ps1` 即可刷新 `.env`。
