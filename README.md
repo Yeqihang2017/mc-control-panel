@@ -1,80 +1,134 @@
 # Minecraft Control Panel
 
-一个独立的 Minecraft Bedrock 服务器 Docker 管理面板。默认只管理本项目目录下创建的服务器，不会读取或接管你原来的服务器目录；新建服务器时也可以显式填写自定义数据目录。
+一个自托管的 **Minecraft Bedrock 服务器 Docker 管理面板**。基于 Node.js 原生实现(无第三方依赖),通过 Docker Compose 管理多台 Bedrock 服务器,提供完整的 Web 管理界面。
 
-默认访问地址：
+全新 **暗色 HUD 风格**界面:顶部服务器切换条、全屏聚焦层、二级导航,信息分层渐进,专注而不杂乱。
+
+默认访问地址:
 
 ```text
 http://127.0.0.1:8787
 ```
 
-## 功能
+## ✨ 特色
 
-- 管理员账户保护：首次启动创建账户，登录后才能访问面板和 API
-- 密码使用 `scrypt` 加盐哈希保存，支持修改管理员名称和密码、退出登录
-- 会话采用 `HttpOnly` Cookie，支持空闲超时、最长有效期和登录失败限速
-- 一键部署新的 Minecraft Bedrock Docker 服务器
-- 新建服务器时通过下拉列表选择版本
-- 新建服务器时可自定义服务器文件目录
-- 部署前可视化配置端口和 `server.properties` 关键参数
-- 关键数值范围校验：端口 `1-65535`、视距 `5-96`（面板性能安全上限）、Tick 距离 `4-12`
-- 支持强制覆盖已存在的数据目录，需要明确确认
-- 多服务器管理：启动、停止、重启、暂停、恢复、删除
-- 每台服务器可独立设置定时重启：按小时循环或每天固定时间执行
-- 定时重启只处理正在运行的服务器，并显示上次结果和下次执行时间
-- 每台服务器可独立配置 FRP UDP 内网穿透，支持启停、状态和 frpc 日志
-- 删除服务器时需要输入服务器名确认
-- 一级面板显示服务器 CPU、内存、网络和磁盘 IO 占用
-- 二级菜单：
-  - 服务器详情：世界、白名单、模组/资源包、定时重启、内网穿透、文件和删除
-  - 控制台：实时日志和游戏指令
-- 控制台支持实时 Docker logs 和游戏指令输入
-- 指令输入提供常用命令提示
-- 在线玩家：主面板实时显示当前在线玩家（解析服务器日志中的连接/断开事件，约 15 秒刷新一次）
-- 世界管理：新建世界、删除世界、替换世界
-- 备份管理：
-  - 手动备份
-  - 自动备份
-  - 自定义备份目录
-  - 自动备份和手动备份分开保存到 `auto`、`manual` 子目录
-  - 自动备份支持设置备份间隔和最大保留数量
-  - 最近备份列表可快捷还原
-  - 支持手动选择旧备份进行还原
-  - 备份一致性：备份前可优雅停服保存存档再压缩（默认开启，可关闭），确保备份文件完整一致，备份完成后自动重启服务器
-- 白名单列表管理
-- 模组/资源包管理，不显示默认资源包
-- 文件浏览和小文件在线编辑
-- 上传 `.mcpack`、`.mcaddon`、`.zip` 并安装到 behavior/resource packs
+- **暗色 HUD 界面** —— 钻石蓝主色、状态发光点、方块按钮,像游戏里的控制台
+- **二级导航** —— 详情页左侧功能列表 + 右侧内容区,一次只聚焦一个功能
+- **在线玩家** —— 主面板实时显示当前在线玩家(解析服务器日志,15 秒刷新)
+- **备份一致性** —— 备份前优雅停服保存存档再压缩,确保备份完整,自动重启
+- **一键部署** —— 一条命令拉起整个面板,免配置
+- **纯原生** —— 零 npm 依赖,轻量安全
 
-## 目录说明
+## 🚀 快速开始(Docker)
 
-项目默认只使用这些本地运行数据：
+需要 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 已安装并运行。
 
-```text
-mc-control-panel/compose.yml
-mc-control-panel/servers/
-mc-control-panel/panel.log
-mc-control-panel/.panel-tmp/
-mc-control-panel/.panel-auth.json
+在项目目录打开 PowerShell,运行:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-panel-docker.ps1
 ```
 
-这些目录和文件已经在 `.gitignore` 中排除，不会提交到 GitHub。
+脚本自动完成:
 
-每台服务器的 FRP 私密配置保存在对应数据目录的 `.panel-frp/` 中，也不会提交到 GitHub 或出现在面板文件编辑器中。
+1. 生成本机 `.env`(自动计算 Docker 可识别的项目路径)
+2. 构建并启动面板容器 `docker compose up -d --build`
+3. 面板运行在 http://127.0.0.1:8787
 
-`compose.example.yml` 是一个安全的示例模板。实际运行时由面板生成 `compose.yml`，不要手动提交。
+首次打开面板会要求**创建管理员账户**(不提供默认账号),密码使用 `scrypt` 加盐哈希保存。
 
-面板容器会把宿主项目的 `public/` 目录额外挂载到容器内的 `/app/public`（见 `panel.compose.yml`），这样修改前端文件后无需重建镜像即可生效，浏览器强刷（`Ctrl+Shift+R`）即可看到新界面。
+> 前端文件已挂载到容器(`./public:/app/public`),修改 UI 后**无需重建容器**,浏览器强刷(`Ctrl+Shift+R`)即可生效。
 
-### 自定义目录
+### 手动 Docker Compose 启动
 
-新建服务器时，“服务器文件目录”可以留空，留空时默认使用：
+先创建 `.env`:
 
-```text
-servers/<服务名>
+```env
+PANEL_HOST_DATA_DIR=/run/desktop/mnt/host/e/Games/Server/mc-control-panel
+PANEL_EXTRA_HOST_DATA_DIR=/run/desktop/mnt/host/e/Games/Server
+PANEL_HOST_ROOT_DIR=/run/desktop/mnt/host
 ```
 
-也可以填写面板可访问的目录：
+然后:
+
+```powershell
+docker compose --env-file .env -f panel.compose.yml up -d --build
+```
+
+常用命令:
+
+```powershell
+# 查看面板日志
+docker logs -f mc-control-panel
+# 停止面板
+docker compose --env-file .env -f panel.compose.yml down
+```
+
+### 本机 Node 启动(免 Docker)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-panel.ps1
+```
+
+## 📋 功能总览
+
+### 面板管理
+
+- 管理员账户:首次创建、登录、修改名称/密码、退出
+- 会话安全:HttpOnly Cookie、CSRF 校验、空闲超时、登录失败限速
+- 面板日志:内置日志查看器
+
+### 服务器管理
+
+- 一键部署新服务器:版本下拉选择、自定义数据目录、端口与 `server.properties` 预配置
+- 数值范围校验:端口 `1-65535`、视距 `5-96`、Tick 距离 `4-12`
+- 多服务器:启动 / 停止 / 重启 / 暂停 / 恢复 / 删除(需输入名称确认)
+- 顶部切换条快速切换服务器,chip 带状态光点与快速启停
+- 资源占用:CPU / 内存 / 网络 / 磁盘 IO 实时监控
+- 关键配置在线修改,保存即生效
+
+### 世界与备份
+
+- 新建世界(设置 level-name 与种子)、删除世界(自动先备份)、上传替换世界
+- 手动备份 / 自动备份(可设间隔与最大保留数)
+- 自定义备份目录,`auto`、`manual` 分目录保存
+- 最近备份列表快捷还原,或手动选择旧备份还原
+- **备份一致性**(默认开启):备份前优雅停服 → 保存存档 → 压缩 → 自动重启,确保备份不损坏
+
+### 玩家与内容
+
+- **在线玩家**:实时显示,15 秒自动刷新
+- 白名单管理:添加 / 删除,支持 XUID 与忽略人数上限
+- 模组 / 资源包:上传 `.mcpack`、`.mcaddon`、`.zip` 自动识别并安装,可激活到指定世界
+
+### 运维
+
+- **定时重启**:每台服务器独立设置(按小时循环 / 每天固定时间),只处理运行中的服务器,显示上次结果与下次执行时间
+- **FRP 内网穿透**:每台服务器独立 `frpc` 容器,支持启停、状态、实时日志;令牌脱敏存储,失败自动回滚
+- 文件管理:浏览目录、小文件在线编辑、文件上传
+
+### 控制台
+
+- 实时 Docker 日志(自动刷新)
+- 游戏指令输入,常用指令快捷提示
+
+## 📁 目录说明
+
+项目只使用以下本地运行数据(均已 `.gitignore` 排除):
+
+```text
+mc-control-panel/compose.yml      # 面板生成的服务器编排
+mc-control-panel/servers/         # 服务器数据目录
+mc-control-panel/panel.log        # 面板日志
+mc-control-panel/.panel-tmp/      # 上传临时文件
+mc-control-panel/.panel-auth.json # 管理员账户
+```
+
+每台服务器的 FRP 私密配置保存在对应数据目录的 `.panel-frp/` 中,不会提交到 Git,也不会出现在文件编辑器中。
+
+### 自定义数据目录
+
+新建服务器时"服务器文件目录"留空则默认 `servers/<服务名>`。也可填写任意面板可访问的目录:
 
 ```text
 servers/my-bedrock
@@ -84,161 +138,60 @@ E:\MC\server-a
 /hostfs/e/MC/server-a
 ```
 
-在 Docker 部署模式下：
+Docker 模式下路径映射:
 
-- `/data` 对应本项目目录 `mc-control-panel/`
-- `/host-data` 对应项目上一级目录，当前脚本默认是 `E:\Games\Server`
-- `/hostfs` 对应 Docker Desktop 的宿主机磁盘根目录，例如 `/hostfs/e/...` 对应 `E:\...`，`/hostfs/f/...` 对应 `F:\...`
-- Windows 路径也可以直接填写，例如 `F:\MinecraftBackups\server-a`，面板会自动转换
+| 路径 | 对应 |
+| --- | --- |
+| `/data` | 本项目目录 `mc-control-panel/` |
+| `/host-data` | 项目上一级目录(默认 `E:\Games\Server`) |
+| `/hostfs` | Docker Desktop 宿主机磁盘根目录(`/hostfs/e/...` = `E:\...`) |
 
-服务器文件目录和备份目录是按服务器分别保存的。你可以让服务器 A 运行在 E 盘、备份到 F 盘，服务器 B 运行在 G 盘、备份到 H 盘。
+Windows 路径可直接填写,面板自动转换。每台服务器的数据目录和备份目录独立,可让服务器 A 在 E 盘、备份到 F 盘。
 
-例如新建服务器时填写：
+删除服务器默认保留数据目录;勾选"同时删除数据目录"后,`servers/` 下的目录按服务器名确认删除,自定义目录需额外输入完整路径。
 
-```text
-服务器文件目录：E:\MC\server-a
-```
+## ⚙️ 配置说明
 
-然后进入这台服务器的 `服务器详情 -> 世界 -> 自动备份`，把备份目录填写为：
-
-```text
-F:\MinecraftBackups\server-a
-```
-
-面板会继续把自动备份和手动备份分开放到 `auto`、`manual` 子目录，实际目录类似：
-
-```text
-F:\MinecraftBackups\server-a\auto
-F:\MinecraftBackups\server-a\manual
-```
-
-删除服务器时默认保留数据目录。如果勾选“同时删除数据目录”，默认 `servers/` 下的数据目录会直接按服务器名确认删除；自定义数据目录还需要额外输入完整目录路径确认。
-
-## Docker 部署面板
-
-在项目目录运行一条命令即可自动生成 Docker 配置并启动面板：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start-panel-docker.ps1
-```
-
-脚本会自动生成本机 `.env`，里面包含 Docker Desktop 能识别的项目目录路径。`.env` 是本机配置文件，已经被 `.gitignore` 排除。
-
-首次打开面板时会要求创建管理员账户，不提供默认用户名和密码。管理员账户文件保存在 `.panel-auth.json`，随面板数据目录持久化，并已从 Git 提交中排除。
-
-或手动创建 `.env` 后使用 Docker Compose：
-
-```env
-PANEL_HOST_DATA_DIR=/run/desktop/mnt/host/e/Games/Server/mc-control-panel
-PANEL_EXTRA_HOST_DATA_DIR=/run/desktop/mnt/host/e/Games/Server
-PANEL_HOST_ROOT_DIR=/run/desktop/mnt/host
-```
-
-```powershell
-docker compose --env-file .env -f panel.compose.yml up -d --build
-```
-
-查看面板容器日志：
-
-```powershell
-docker logs -f mc-control-panel
-```
-
-停止面板：
-
-```powershell
-docker compose --env-file .env -f panel.compose.yml down
-```
-
-## 本机 Node 启动
-
-如果你想不经过 Docker 直接启动面板：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start-panel.ps1
-```
-
-## 配置说明
-
-面板容器使用以下环境变量：
+面板容器环境变量:
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `PANEL_HOST` | `0.0.0.0` | 面板监听地址 |
 | `PANEL_PORT` | `8787` | 面板监听端口 |
 | `PANEL_DATA_DIR` | `/data` | 容器内数据目录 |
-| `PANEL_HOST_DATA_DIR` | 由 `.env` 提供 | Docker Desktop 中映射到宿主机项目目录的路径 |
+| `PANEL_HOST_DATA_DIR` | 由 `.env` 提供 | Docker 映射到宿主机项目目录的路径 |
 | `PANEL_EXTRA_HOST_DATA_DIR` | 由 `.env` 提供 | 映射到容器 `/host-data` 的宿主机目录 |
 | `PANEL_HOST_ROOT_DIR` | 由 `.env` 提供 | 映射到容器 `/hostfs` 的宿主机磁盘根目录 |
-| `PANEL_PATH_MAPPINGS` | `/data=...;/host-data=...;/hostfs=...` | 面板把容器路径转换为 Minecraft 容器宿主机挂载路径时使用 |
-| `PANEL_SECURE_COOKIE` | `false` | HTTPS 反向代理部署时设为 `true`，强制会话 Cookie 仅通过 HTTPS 发送 |
+| `PANEL_PATH_MAPPINGS` | `/data=...;/host-data=...;/hostfs=...` | 容器路径 → Minecraft 容器宿主机挂载路径转换 |
+| `PANEL_SECURE_COOKIE` | `false` | HTTPS 反向代理时设为 `true`,Cookie 仅经 HTTPS 发送 |
 
-如果你把项目移动到其他磁盘或目录，重新运行 `start-panel-docker.ps1` 即可刷新 `.env`。
+移动项目目录后,重新运行 `start-panel-docker.ps1` 即可刷新 `.env`。
 
-## 定时重启
+## 🔒 安全提示
 
-在 `服务器详情 -> 定时重启` 中，可以为每台服务器独立设置：
+面板容器挂载了 Docker socket(`/var/run/docker.sock`),**拥有宿主机 Docker 的完全控制权**。请仅在本机或可信内网使用:
 
-- 按小时循环重启
-- 每天固定时间重启
-- 启用或停用计划
+- 不要直接把 `8787` 端口暴露到公网
+- 公网部署需配置 HTTPS、反向代理与防火墙
+- 登录验证可防未授权访问,但不是公网暴露的替代方案
 
-计划使用浏览器提交的本地时区计算下一次执行时间。定时任务只重启正在运行且未暂停的服务器；停止或未创建的服务器会被跳过。面板会显示下次执行时间、上次执行时间和执行结果。
+**忘记密码**:停止面板容器,删除项目目录的 `.panel-auth.json`,重新启动面板即可重建管理员(不影响服务器数据)。
 
-## FRP 内网穿透
+## 🧪 测试
 
-面板中的 `服务器详情 -> 内网穿透` 可以为每台 Bedrock 服务器创建独立的 `frpc` Docker 容器。需要提前在有公网 IP 的 VPS 上部署 `frps`，并在 VPS 防火墙和云安全组放行：
-
-- FRP 控制端口，例如 `7000/TCP`
-- 为服务器设置的公网游戏端口，例如 `19132/UDP`
-
-可配置项目包括：
-
-- `frps` 域名或 IP
-- FRP 控制端口
-- 公网 UDP 端口
-- 认证令牌
-- TLS 开关
-
-面板使用固定镜像 `fatedier/frpc:v0.70.1`，并为每台 Minecraft 服务器创建独立的 `frpc-<服务器名>` Compose 服务。代理通过 Compose 网络按服务名连接 Minecraft 容器，不需要把游戏端口再次暴露给宿主机。
-
-认证令牌保存在服务器数据目录的私密 `.panel-frp` 目录中，不会通过 API 回传，也不会显示在文件编辑器、`compose.yml` 或面板日志中。留空令牌会保留之前保存的值。保存新配置会强制重建对应的 `frpc` 容器；应用失败时会恢复之前的 Compose 和私密配置。停用 FRP 只删除面板管理的代理容器，不会重启 Minecraft 服务器。
-
-面板中可以查看代理状态、公网连接地址和 `frpc` 实时日志，也可以单独启动、停止或重启代理。玩家使用 `frps 域名或公网 IP:公网 UDP 端口` 连接。
-
-## 测试
-
-FRP 集成测试会创建带唯一名称的临时 Compose 项目、Minecraft 夹具、`frps` 和面板容器，完成后自动清理。它不会读取或操作正式的 `compose.yml` 和服务器数据。
+FRP 集成测试(创建临时 Compose 项目,自动清理,不影响正式数据):
 
 ```powershell
 npm run test:frp-integration
 ```
 
-测试覆盖管理员认证和 CSRF、代理启停、配置更新、日志、失败回滚、同名容器保护、令牌脱敏、私密文件隔离，以及确认 FRP 操作不会重启 Minecraft 容器。
+覆盖:管理员认证与 CSRF、代理启停、配置更新、日志、失败回滚、同名容器保护、令牌脱敏、私密文件隔离。
 
-## 安全提示
+## 📌 GitHub 提交说明
 
-面板容器会挂载 Docker socket：
+仓库仅包含面板源码与部署模板,以下运行时数据不会提交:
 
-```yaml
-/var/run/docker.sock:/var/run/docker.sock
-```
-
-这意味着面板可以控制宿主机上的 Docker 容器。建议只在本机或可信内网使用，不要直接暴露到公网。
-
-管理员登录能防止未经授权的面板操作，但公网部署还应配置 HTTPS、反向代理和防火墙；不要直接把 `8787` 端口暴露到互联网。
-
-忘记密码时，停止面板容器，删除项目目录中的 `.panel-auth.json`，再启动面板即可重新创建管理员。此操作不会删除 Minecraft 服务器、世界或备份数据。
-
-## GitHub 提交说明
-
-仓库只包含面板源码和部署模板。以下运行时数据不会提交：
-
-- Minecraft 服务器数据
-- 世界存档
-- 备份文件
-- 上传的资源包或模组包
-- 面板日志
-- 本机生成的 `compose.yml`
-- 管理员账户文件
-- 每台服务器的 FRP 私密配置
+- Minecraft 服务器数据、世界存档、备份文件
+- 上传的资源包 / 模组包
+- 面板日志、本机生成的 `compose.yml`
+- 管理员账户文件、FRP 私密配置
