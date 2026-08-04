@@ -37,7 +37,7 @@ powershell -ExecutionPolicy Bypass -File .\start-panel-docker.ps1
 
 首次打开面板会要求**创建管理员账户**(不提供默认账号),密码使用 `scrypt` 加盐哈希保存。
 
-> 前端文件已挂载到容器(`./public:/app/public`),修改 UI 后**无需重建容器**,浏览器强刷(`Ctrl+Shift+R`)即可生效。
+> 前端文件已挂载到容器(`./public:/app/public`)、后端文件也已挂载(`./server.js:/app/server.js`),修改代码后**无需重建容器**,浏览器强刷(`Ctrl+Shift+R`)即可生效。
 
 ### 手动 Docker Compose 启动
 

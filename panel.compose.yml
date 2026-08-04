@@ -19,6 +19,7 @@ services:
     volumes:
       - ./:/data
       - ./public:/app/public
+      - ./server.js:/app/server.js
       - "${PANEL_EXTRA_HOST_DATA_DIR:?Run start-panel-docker.ps1 first or create a .env file.}:/host-data"
       - "${PANEL_HOST_ROOT_DIR:?Run start-panel-docker.ps1 first or create a .env file.}:/hostfs"
       - /var/run/docker.sock:/var/run/docker.sock
