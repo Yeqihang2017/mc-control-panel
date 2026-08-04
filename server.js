@@ -1089,9 +1089,6 @@ async function deleteServer(name, body) {
   const { dataPath } = await getServer(name);
   if (body.deleteDataDir) {
     assertSafeDirectoryRemoval(dataPath, "数据目录");
-    if (!isSameOrInside(SERVERS_DIR, dataPath) && String(body.confirmDataPath || "").trim() !== dataPath) {
-      throw httpError(400, "自定义数据目录需要输入完整目录路径确认删除。");
-    }
   }
   const composeBefore = await fsp.readFile(COMPOSE_FILE, "utf8");
   const restartTimer = restartTimers.get(name);

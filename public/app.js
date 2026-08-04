@@ -725,7 +725,6 @@ async function deleteServer() {
   if (!server) return;
   const confirmName = $("deleteServerName").value.trim();
   const deleteDataDir = $("deleteServerData").checked;
-  const confirmDataPath = $("deleteServerDataPath").value.trim();
   if (confirmName !== server.name) return toast("请输入完全一致的服务器名");
   const warning = deleteDataDir
     ? `将删除服务器 ${server.name}，并删除数据目录。此操作不可恢复，确定继续？`
@@ -733,11 +732,10 @@ async function deleteServer() {
   if (!confirm(warning)) return;
   await api(`/api/server/${server.name}/delete`, {
     method: "POST",
-    body: JSON.stringify({ confirmName, deleteDataDir, confirmDataPath })
+    body: JSON.stringify({ confirmName, deleteDataDir })
   });
   $("deleteServerName").value = "";
   $("deleteServerData").checked = false;
-  $("deleteServerDataPath").value = "";
   leaveDetailsView();
   toast("服务器已删除");
   await refresh();
